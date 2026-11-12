@@ -23,6 +23,7 @@ import { FinanceReceivablesService } from './finance-receivables.service';
 import { FinanceTaxService } from './finance-tax.service';
 import { FinanceAssetsService } from './finance-assets.service';
 import { FinanceFxService } from './finance-fx.service';
+import type { AiInfraService } from '../ai/ai-infra.service';
 
 class FakeClsService {
   private store: Record<string, unknown> = {};
@@ -530,6 +531,87 @@ describe('Finance ledger (real DB)', () => {
         .status,
     ).toBe('Locked');
     await expectCode(banking.unmatch(owner, lines[0].id), 'FINANCE_CONFLICT');
+  });
+
+  it('finance.categorise: AI suggests an account only when nothing else matches; low confidence goes to Needs Review; never auto-applied', async () => {
+    const maps = await ctx.accountMaps(businessId);
+    const fees = maps.byKey.get('bank_fees')!;
+    const sales = maps.byKey.get('sales')!;
+    // Answers by line text: a vague debit gets a low-confidence guess, a clear credit a high one,
+    // and one line gets a code that is not on the list (must be ignored).
+    const complete = jest.fn((...args: unknown[]) => {
+      const prompt = String(args[1]);
+      if (prompt.includes('ZXQ VAGUE'))
+        return Promise.resolve(
+          `{"accountCode":"${fees.code}","confidence":40}`,
+        );
+      if (prompt.includes('QWV CLEAR'))
+        return Promise.resolve(
+          `{"accountCode":"${sales.code}","confidence":96}`,
+        );
+      return Promise.resolve(
+        '{"accountCode":"99999-NOT-REAL","confidence":99}',
+      );
+    });
+    const aiBanking = new FinanceBankingService(
+      prisma,
+      ctx,
+      posting,
+      journals,
+      { complete } as unknown as AiInfraService,
+    );
+    const bank = await aiBanking.create(owner, {
+      name: 'AI Categorise',
+      kind: 'bank',
+      mask: '7310',
+      openingBalance: 0,
+      openingDate: iso(today),
+    });
+    const csv = Buffer.from(
+      `Date,Description,Amount\n${iso(today)},ZXQ VAGUE PAYMENT,-13.37\n${iso(today)},QWV CLEAR INCOME,77.71\n${iso(today)},PLM MADE UP,-4.21\n`,
+    );
+    await aiBanking.importStatement(owner, bank.id, {
+      buffer: csv,
+      originalname: 'ai.csv',
+    });
+    expect(complete).toHaveBeenCalledTimes(3);
+    // Routed operation kind, and the prompt only offers postable accounts from this business.
+    expect(complete.mock.calls[0][3]).toBe('finance_categorise');
+    const lines = await prisma.finBankLine.findMany({
+      where: { bankAccountId: bank.id },
+      orderBy: { amount: 'asc' },
+    });
+    const [vague, madeUp, clear] = lines;
+    const sug = (l: (typeof lines)[number]) =>
+      l.suggestion as { source?: string; accountId?: string } | null;
+    expect(vague.status).toBe('Needs Review');
+    expect(vague.confidence).toBe(40);
+    expect(sug(vague)).toMatchObject({ source: 'ai', accountId: fees.id });
+    expect(clear.status).toBe('Suggested');
+    expect(sug(clear)).toMatchObject({ source: 'ai', accountId: sales.id });
+    expect(madeUp.status).toBe('New'); // an invented code is never suggested
+    expect(madeUp.suggestion).toBeNull();
+    // Nothing was matched or posted without a person.
+    expect(lines.every((l) => l.status !== 'Matched')).toBe(true);
+
+    // Re-suggesting (e.g. after a new bank rule) reuses the stored AI suggestion — no re-billing.
+    complete.mockClear();
+    await aiBanking.resuggestAll(businessId);
+    const ids = new Set([vague.id, clear.id]);
+    const again = await prisma.finBankLine.findMany({
+      where: { id: { in: [...ids] } },
+    });
+    for (const l of again) expect(sug(l)?.source).toBe('ai');
+    // Only the line with no stored suggestion may be asked again.
+    for (const call of complete.mock.calls)
+      expect(String(call[1])).toContain('PLM MADE UP');
+
+    // The person confirms: matching the AI-suggested line posts it.
+    await aiBanking.match(owner, clear.id, {});
+    expect(
+      (await prisma.finBankLine.findUniqueOrThrow({ where: { id: clear.id } }))
+        .status,
+    ).toBe('Matched');
   });
 
   it('flags duplicate vendor invoices, posts approved bills and keeps A/P in step', async () => {

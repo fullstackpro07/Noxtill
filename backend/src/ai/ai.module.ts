@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { AiController } from './ai.controller';
-import { ClaudeClient } from './claude.client';
+import { AiRouterService } from './routing/ai-router.service';
 import { AiInfraService } from './ai-infra.service';
 import { AiSettingsService } from './ai-settings.service';
 import { SpeechToTextService } from './speech-to-text.service';
@@ -10,11 +10,11 @@ import { SpeechToTextService } from './speech-to-text.service';
   controllers: [AiController],
   providers: [
     AiService,
-    ClaudeClient,
+    AiRouterService,
     AiInfraService,
     AiSettingsService,
     SpeechToTextService,
   ],
-  exports: [ClaudeClient, AiInfraService, SpeechToTextService],
+  exports: [AiRouterService, AiInfraService, SpeechToTextService],
 })
 export class AiModule {}

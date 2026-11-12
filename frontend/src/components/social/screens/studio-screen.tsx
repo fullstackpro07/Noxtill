@@ -37,10 +37,11 @@ export function StudioScreen() {
       ]
     : [];
 
-  // Only Claude is a real, connected generation provider — no Adobe Firefly / Canva / OpenAI
-  // integration exists in this codebase, so those are not claimed as "Connected".
+  // Caption generation runs on Noxtill's routed AI (the backend picks the model per operation,
+  // with automatic provider fallback). No Adobe Firefly / Canva integration exists in this
+  // codebase, so those are not claimed as "Connected".
   const providers = [
-    { n: "Anthropic Claude", task: "Caption generation", st: "Connected", bg: "#E8F7EE", fg: "#0E8442" },
+    { n: "Noxtill AI", task: "Caption generation", st: "Connected", bg: "#E8F7EE", fg: "#0E8442" },
   ];
 
   const genVariants = [

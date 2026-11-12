@@ -5,6 +5,7 @@ import axios from 'axios';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import type { CallServiceFailure } from './voice-analysis';
+import { AiRouterService } from '../ai/routing/ai-router.service';
 
 export type HealthStatus = 'ok' | 'warning' | 'error' | 'not_configured';
 
@@ -24,6 +25,7 @@ export class VoiceProviderHealthService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly config: ConfigService,
+    private readonly aiRouter: AiRouterService,
   ) {}
 
   async health(businessId: string) {
@@ -169,7 +171,11 @@ export class VoiceProviderHealthService {
         : 'Recordings are stored on this server’s local disk with signed, expiring links (no S3 credentials).',
     });
     const speech = !!this.config.get<string>('OPENAI_API_KEY');
-    const aiReplies = !!this.config.get<string>('ANTHROPIC_API_KEY');
+    // Recorded-turn AI replies run on the routed `voice_entry` operation (primary + fallback).
+    const aiReplies = this.aiRouter.isConfigured('voice_entry');
+    const aiReplyProviders = this.aiRouter
+      .configuredProviders('voice_entry')
+      .join(' and ');
     checks.push({
       key: 'realtime_voice',
       label: 'Live AI audio',
@@ -222,12 +228,12 @@ export class VoiceProviderHealthService {
           ? 'error'
           : 'warning',
       detail: !aiReplies
-        ? 'The Anthropic AI reply key is not set. A speech transcription key alone cannot provide AI replies.'
+        ? 'No AI provider key is set for AI replies (the routed reply operation has neither its primary nor its fallback provider configured).'
         : latestReplyFailure
           ? `Last saved AI result: ${latestReplyFailure} Provider access has not been rechecked.`
           : latestAiTest?.passed
             ? `Last saved sandbox test passed at ${latestAiTest.createdAt.toISOString()}. Current provider access and credit are not rechecked here.`
-            : 'The Anthropic AI reply key is set. Provider access and available credit are not verified by this check.',
+            : `AI reply provider key set (${aiReplyProviders}). Provider access and available credit are not verified by this check.`,
     });
     const email =
       !!this.config.get<string>('EMAIL_PROVIDER_KEY') &&

@@ -2090,7 +2090,7 @@ function ActionsEditor({
                   className="m-0 text-[10.5px]"
                   style={{ color: "var(--app-text-muted)" }}
                 >
-                  Only trigger values named in the prompt are sent to Claude. The
+                  Only trigger values named in the prompt are sent to the AI provider. The
                   draft is saved in run history and is not sent to anyone.
                 </p>
               </div>

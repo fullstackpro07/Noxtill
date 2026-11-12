@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { REALTIME_PROVIDER } from '../ai/specialised-services';
 
 const percentile95 = (samples: number[]) =>
   samples.length
@@ -31,7 +32,7 @@ export class VoiceOperationsService {
         this.prisma.voiceUsageRecord.count({
           where: {
             businessId,
-            provider: 'openai',
+            provider: REALTIME_PROVIDER,
             state: 'pending',
             measuredAt: { lt: new Date(Date.now() - 3600000) },
           },

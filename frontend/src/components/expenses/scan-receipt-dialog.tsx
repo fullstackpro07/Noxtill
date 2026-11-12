@@ -14,7 +14,7 @@ import { uploadDigitizerScan, updateDigitizerRow, commitDigitizerBatch, type Dig
 import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 
-/** A row is flagged for review whenever Claude's own self-reported confidence is below this — never per-field, only per-row (that's the real granularity `DigitizerRow.confidence` gives us). */
+/** A row is flagged for review whenever the model's own self-reported confidence is below this — never per-field, only per-row (that's the real granularity `DigitizerRow.confidence` gives us). */
 const LOW_CONFIDENCE_THRESHOLD = 0.7;
 
 export function ScanReceiptDialog({ open, onClose }: { open: boolean; onClose: () => void }) {

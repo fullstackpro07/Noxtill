@@ -2,7 +2,6 @@ import { AiInfraService } from '../ai/ai-infra.service';
 import { CreateMessageParams, CreateMessageResult } from '../ai/claude.client';
 import { DigitizerAliasService } from './digitizer-alias.service';
 import { DigitizerVisionService } from './digitizer-vision.service';
-import { DIGITIZER_MODEL } from './digitizer.constants';
 import { AppException } from '../common/filters/app.exception';
 
 function textResult(
@@ -14,6 +13,8 @@ function textResult(
     stopReason,
     inputTokens: 100,
     outputTokens: 50,
+    // The router reports which model answered; the scan records it.
+    model: 'routed-vision-model',
   };
 }
 
@@ -37,7 +38,7 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
     );
   });
 
-  it('sends a real image content block using the digitizer model', async () => {
+  it('sends a real image content block on the routed vision service (no model named)', async () => {
     aiInfra.createMessage.mockResolvedValue(textResult('[]'));
 
     await service.extract(
@@ -49,7 +50,8 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
 
     expect(aiInfra.createMessage).toHaveBeenCalledTimes(1);
     const params: CreateMessageParams = aiInfra.createMessage.mock.calls[0][2];
-    expect(params.model).toBe(DIGITIZER_MODEL);
+    expect(aiInfra.createMessage.mock.calls[0][1]).toBe('digitizer_scan');
+    expect(params).not.toHaveProperty('model');
     const content = params.messages[0].content;
     if (typeof content === 'string') throw new Error('expected content blocks');
     expect(content[0].type).toBe('image');
@@ -206,7 +208,7 @@ describe('DigitizerVisionService (UPD-BE-060)', () => {
     expect(out.analysis.lineItems).toHaveLength(2);
     expect(out.analysis.lineItems[1].quantity).toBeNull(); // an unread value stays null — never filled in
     expect(out.analysis.totals?.printedTotal).toBe(1400);
-    expect(out.analysis.extractionModel).toBe(DIGITIZER_MODEL);
+    expect(out.analysis.extractionModel).toBe('routed-vision-model');
     expect(out.rows[0].page).toBe(1);
     expect(out.rows[0].sourceRow).toBe(1);
     expect(out.rows[0].fieldConfidence).toEqual({

@@ -1,9 +1,9 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { parse } from 'csv-parse/sync';
 import { Workbook } from 'exceljs';
 import { extractRawText } from 'mammoth';
-import { ClaudeClient } from '../ai/claude.client';
 import { AiInfraService } from '../ai/ai-infra.service';
+import { expectJson } from '../ai/routing/validate';
 import { RawImportRow } from './customer-import.types';
 import {
   applyMapping,
@@ -22,21 +22,20 @@ export interface RawRecords {
   rows: Record<string, string>[];
 }
 
-const CLAUDE_CHUNK_SIZE = 6000;
+const AI_CHUNK_SIZE = 6000;
 
 /**
  * Parses every supported customer-import format into raw {name, phone, balance?}
  * rows (BE-042 step 1). csv/xlsx are structured; txt/docx are unstructured and
- * go through Claude extraction, chunked, at temperature 0 (spec §4.7).
+ * go through AI extraction, chunked, at temperature 0 (spec §4.7).
  */
 @Injectable()
 export class CustomerImportParser {
   private readonly logger = new Logger(CustomerImportParser.name);
 
   constructor(
-    private readonly claude: ClaudeClient,
-    /** Routes extraction through the shared guardrails + AI-credit metering when a business is known. */
-    @Optional() private readonly aiInfra?: AiInfraService,
+    /** Shared AI infra: guardrails + AI-credit metering when a business is known, routing always. */
+    private readonly aiInfra: AiInfraService,
   ) {}
 
   async parse(file: ImportFile, businessId?: string): Promise<RawImportRow[]> {
@@ -124,8 +123,8 @@ export class CustomerImportParser {
     businessId?: string,
   ): Promise<RawImportRow[]> {
     const chunks: string[] = [];
-    for (let i = 0; i < text.length; i += CLAUDE_CHUNK_SIZE) {
-      chunks.push(text.slice(i, i + CLAUDE_CHUNK_SIZE));
+    for (let i = 0; i < text.length; i += AI_CHUNK_SIZE) {
+      chunks.push(text.slice(i, i + AI_CHUNK_SIZE));
     }
 
     const rows: RawImportRow[] = [];
@@ -141,15 +140,16 @@ export class CustomerImportParser {
       ].join('\n');
 
       try {
-        const response =
-          this.aiInfra && businessId
-            ? await this.aiInfra.complete(
-                businessId,
-                prompt,
-                0,
-                'customer_import',
-              )
-            : await this.claude.complete(prompt, 0);
+        // No business (pre-account import preview) → no guardrails/credits, still routed and logged.
+        const response = await this.aiInfra.complete(
+          businessId,
+          prompt,
+          0,
+          'customer_import',
+          undefined,
+          undefined,
+          expectJson((v) => Array.isArray(v)),
+        );
         const parsed = JSON.parse(this.stripCodeFences(response)) as {
           name: string;
           phone: string;
@@ -166,7 +166,7 @@ export class CustomerImportParser {
         }
       } catch (error) {
         this.logger.warn(
-          `Claude extraction chunk failed: ${(error as Error).message}`,
+          `AI extraction chunk failed: ${(error as Error).message}`,
         );
       }
     }

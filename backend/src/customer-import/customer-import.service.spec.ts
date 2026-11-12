@@ -5,7 +5,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { CustomerImportService } from './customer-import.service';
 import { CustomerImportParser } from './customer-import.parser';
-import { ClaudeClient } from '../ai/claude.client';
+import type { AiInfraService } from '../ai/ai-infra.service';
 import type { DigitizerVisionService } from '../digitizer/digitizer-vision.service';
 
 // file-type is ESM-only; its dynamic import() isn't supported under ts-jest's CommonJS
@@ -47,7 +47,7 @@ describe('CustomerImportService (BE-042/043/044)', () => {
     );
     const parser = new CustomerImportParser({
       complete: jest.fn(),
-    } as unknown as ClaudeClient);
+    } as unknown as AiInfraService);
     importService = new CustomerImportService(
       tenantPrisma,
       prisma,

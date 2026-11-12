@@ -186,7 +186,7 @@ export function aiProviderErrorReason(error: unknown): string | null {
       ? response.data.error.message.toLowerCase()
       : '';
   if (message.includes('credit balance')) {
-    return 'The AI provider account is out of credit. Add credit in the Anthropic console, then retry.';
+    return 'The AI provider account is out of credit. Ask the platform administrator to add provider credit, then retry.';
   }
   if (type === 'not_found_error' && message.includes('model')) {
     return "The server's AI model is not available from the provider.";

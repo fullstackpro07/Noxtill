@@ -17,7 +17,7 @@ import { toast } from "@/lib/toast";
 import { formatDate } from "@/lib/format";
 
 /**
- * AI-reallocation-suggestion (UPD-FE-060e) — a real Claude call via the shared, rate-limited AI
+ * AI-reallocation-suggestion (UPD-FE-060e) — a real AI call via the shared, rate-limited AI
  * infra (`MarketingOverviewService.suggestReallocation`, already built for the cross-channel
  * Marketing Overview screen), grounded in this business's own real spend/results across every ad
  * platform. Reused rather than duplicated with a second, ads-only AI call.

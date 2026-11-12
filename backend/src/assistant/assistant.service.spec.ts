@@ -4,7 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { AssistantService } from './assistant.service';
-import { ClaudeClient, CreateMessageParams } from '../ai/claude.client';
+import type { CreateMessageParams } from '../ai/ai-message.types';
+import type { AiRouterService } from '../ai/routing/ai-router.service';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { AppException } from '../common/filters/app.exception';
 
@@ -114,6 +115,21 @@ describe('AssistantService (BE-074)', () => {
   const claude = {
     streamMessage: jest.fn<Promise<Readable>, [CreateMessageParams]>(),
   };
+  // The router's stream() wraps the provider stream with route meta.
+  const router = {
+    stream: async (kind: string, params: CreateMessageParams) => ({
+      stream: await claude.streamMessage(params),
+      meta: {
+        kind,
+        operation: 'assistant.business_chat',
+        tier: 'hard',
+        provider: 'anthropic' as const,
+        model: 'test-model',
+        usedFallback: false,
+        latencyMs: 1,
+      },
+    }),
+  };
   const aiInfra = {
     checkGuardrails: jest.fn().mockResolvedValue(undefined),
     recordUsage: jest.fn().mockResolvedValue(undefined),
@@ -134,7 +150,7 @@ describe('AssistantService (BE-074)', () => {
     service = new AssistantService(
       tenantPrisma,
       prisma,
-      claude as unknown as ClaudeClient,
+      router as unknown as AiRouterService,
       aiInfra as unknown as AiInfraService,
     );
 

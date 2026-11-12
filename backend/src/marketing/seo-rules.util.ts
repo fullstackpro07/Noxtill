@@ -2,6 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import { AppException } from '../common/filters/app.exception';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { isAiNotConfiguredError } from '../ai/routing/ai-router.service';
 
 export const SEO_AI_DRAFTS_OFF = 'SEO_AI_DRAFTS_OFF';
 
@@ -55,7 +56,7 @@ export async function seoAiComplete(
       businessId: string,
       prompt: string,
       temperature: number,
-      kind: 'complete',
+      kind: 'seo_content',
     ): Promise<string>;
   },
   businessId: string,
@@ -63,13 +64,10 @@ export async function seoAiComplete(
   temperature: number,
 ): Promise<string> {
   try {
-    return await ai.complete(businessId, prompt, temperature, 'complete');
+    return await ai.complete(businessId, prompt, temperature, 'seo_content');
   } catch (error) {
     if (error instanceof AppException) throw error;
-    if (
-      error instanceof Error &&
-      error.message === 'ANTHROPIC_API_KEY is not configured'
-    ) {
+    if (isAiNotConfiguredError(error)) {
       throw new AppException(
         SEO_AI_NOT_CONFIGURED,
         'AI drafting is not set up on this server (no AI provider key is configured). Write the content yourself, or ask your administrator to configure the AI provider.',

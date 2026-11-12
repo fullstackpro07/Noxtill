@@ -6,6 +6,7 @@ import { AppException } from '../common/filters/app.exception';
 import { AuditService } from '../common/audit/audit.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { VOICE_ERROR_CODES } from './voice.constants';
+import { isAiNotConfiguredError } from '../ai/routing/ai-router.service';
 
 interface TranscriptTurn {
   speaker: 'caller' | 'assistant';
@@ -122,9 +123,7 @@ export class VoiceCopilotService {
       });
     } catch (error) {
       if (error instanceof AppException) throw error;
-      const missingKey =
-        error instanceof Error &&
-        error.message.includes('ANTHROPIC_API_KEY is not configured');
+      const missingKey = isAiNotConfiguredError(error);
       throw new AppException(
         VOICE_ERROR_CODES.COPILOT_PROVIDER_UNAVAILABLE,
         missingKey

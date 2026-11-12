@@ -1,7 +1,7 @@
 export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 /** A multi-page PDF is legitimately larger than a single photo. */
 export const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024;
-/** Claude reads at most 100 PDF pages per request; this is the tighter limit the product enforces. */
+/** Vision models read at most ~100 PDF pages per request; this is the tighter limit the product enforces. */
 export const MAX_PDF_PAGES = 40;
 
 export const ALLOWED_IMAGE_MIME_TYPES = [
@@ -17,12 +17,6 @@ export const ALLOWED_UPLOAD_MIME_TYPES = [
   ...ALLOWED_IMAGE_MIME_TYPES,
   PDF_MIME_TYPE,
 ] as const;
-
-/**
- * Claude Haiku 4.5 — the vision model used for extraction. Unlike the older Haiku the shared
- * `VISION_MODEL` points at, it reads PDF documents natively and is far better at handwriting.
- */
-export const DIGITIZER_MODEL = 'claude-haiku-4-5-20251001';
 
 export const SCANNER_TYPES = [
   'register',

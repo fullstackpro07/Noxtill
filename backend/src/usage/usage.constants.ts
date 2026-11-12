@@ -1,3 +1,5 @@
+import { STT_PROVIDER } from '../ai/specialised-services';
+
 /**
  * Usage, Limits & Subscription system — the registry (docs/Noxtill_Usage_Limits_System.md).
  *
@@ -275,7 +277,7 @@ export const METER_SEEDS: MeterSeed[] = [
     displayName: 'Transcription minutes',
     unit: 'minute',
     kind: 'passthrough',
-    provider: 'openai',
+    provider: STT_PROVIDER,
     resetRule: 'period',
     isBillable: false,
     enforced: false,
@@ -710,6 +712,18 @@ export const KIND_TO_OPERATION: Record<string, AiOperation | null> = {
     module: 'SEO Autopilot',
     label: 'Content optimiser',
     band: 'large',
+  },
+  seo_content: {
+    code: 'seo.content_optimiser',
+    module: 'SEO Autopilot',
+    label: 'Content optimiser',
+    band: 'small',
+  },
+  finance_categorise: {
+    code: 'finance.categorise',
+    module: 'Finance & Accounting',
+    label: 'Transaction categorisation',
+    band: 'micro',
   },
   seo_link_building_outreach: {
     code: 'seo.agent_run',

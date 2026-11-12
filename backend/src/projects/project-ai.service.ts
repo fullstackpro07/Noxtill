@@ -94,7 +94,7 @@ export class ProjectAiService {
       );
       const text = res.content.find((b) => b.type === 'text')?.text ?? '';
       plan = parsePlan(text);
-      if (plan) source = 'Claude, from your goal, deadline and constraints';
+      if (plan) source = 'AI, from your goal, deadline and constraints';
     } catch (e) {
       if (
         e instanceof AppException &&

@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import mammoth from 'mammoth';
 import { AiInfraService } from '../ai/ai-infra.service';
-import { VISION_MODEL } from '../ai/claude.client';
 import { AppException } from '../common/filters/app.exception';
 import {
   ATTACHMENT_AI_CALL_KIND,
@@ -35,7 +34,7 @@ type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
  * which stages rows for a confirmed import.
  *
  * Real extraction per type: `pdf-parse` for PDFs, `mammoth` for .docx, a UTF-8 read for
- * text/CSV/JSON/Markdown, and Claude Vision (the same `VISION_MODEL` the digitizer uses) for
+ * text/CSV/JSON/Markdown, and the routed vision service (the same one the digitizer uses) for
  * images. An unsupported type is rejected outright rather than silently attached as an empty file.
  */
 @Injectable()
@@ -141,7 +140,7 @@ export class AssistantAttachmentService {
     }
   }
 
-  /** Real Claude Vision read — same model the Photo Digitizer uses, but asked for prose rather
+  /** Real vision read — same routed vision service the Photo Digitizer uses, but asked for prose rather
    * than importable rows, since this is only ever fed back as context for a question. */
   private async readImage(
     businessId: string,
@@ -153,7 +152,6 @@ export class AssistantAttachmentService {
         businessId,
         ATTACHMENT_AI_CALL_KIND,
         {
-          model: VISION_MODEL,
           temperature: 0,
           maxTokens: 1500,
           messages: [

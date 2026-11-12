@@ -11,15 +11,14 @@ import {
 } from '../usage/usage.constants';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import {
-  ClaudeClient,
+import type {
   CreateMessageParams,
   CreateMessageResult,
-} from './claude.client';
+} from './ai-message.types';
+import { AiRouterService, RouteMeta } from './routing/ai-router.service';
+import { costUsd } from './routing/ai-routing.config';
 import {
   AI_ERROR_CODES,
-  HAIKU_INPUT_COST_PER_TOKEN,
-  HAIKU_OUTPUT_COST_PER_TOKEN,
   IMAGE_GENERATION_COST_USD,
   KIND_TO_FEATURE,
   RATE_LIMIT_WINDOW_MS,
@@ -29,7 +28,7 @@ import { Prisma } from '@prisma/client';
 /**
  * Shared AI infra (BE-075) — every AI feature in the product (what-if,
  * branch-advisor, review AI-draft, business-type mapping, RAG help,
- * assistant chat) goes through here rather than calling ClaudeClient
+ * assistant chat) goes through here rather than calling a model client
  * directly, so rate limiting, the monthly cost cap, and call logging are
  * enforced exactly once, in exactly one place.
  *
@@ -43,7 +42,7 @@ export class AiInfraService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly claude: ClaudeClient,
+    private readonly router: AiRouterService,
     private readonly config: ConfigService,
     /** Usage & Limits AI credits. Optional only so unit specs can construct this without it. */
     @Optional() private readonly credits?: CreditsService,
@@ -109,7 +108,34 @@ export class AiInfraService {
       voiceAgentVersionId: string;
       monthlyBudgetUsd?: number | null;
     },
+    validate?: CreateMessageParams['validate'],
   ): Promise<string> {
+    return (
+      await this.completeDetailed(
+        businessId,
+        prompt,
+        temperature,
+        kind,
+        maxTokens,
+        voiceBudget,
+        validate,
+      )
+    ).text;
+  }
+
+  /** `complete()` plus which provider/model actually answered (for audit records). */
+  async completeDetailed(
+    businessId: string | undefined,
+    prompt: string,
+    temperature = 0,
+    kind = 'complete',
+    maxTokens?: number,
+    voiceBudget?: {
+      voiceAgentVersionId: string;
+      monthlyBudgetUsd?: number | null;
+    },
+    validate?: CreateMessageParams['validate'],
+  ): Promise<{ text: string; provider?: string; model?: string }> {
     if (businessId && voiceBudget?.monthlyBudgetUsd != null) {
       await this.enforceVoiceVersionBudget(
         businessId,
@@ -124,12 +150,13 @@ export class AiInfraService {
         messages: [{ role: 'user', content: prompt }],
         temperature,
         ...(maxTokens ? { maxTokens } : {}),
+        ...(validate ? { validate } : {}),
       },
       undefined,
       voiceBudget?.voiceAgentVersionId,
     );
     const text = result.content.find((block) => block.type === 'text')?.text;
-    return text ?? '';
+    return { text: text ?? '', provider: result.provider, model: result.model };
   }
 
   private async enforceVoiceVersionBudget(
@@ -238,9 +265,9 @@ export class AiInfraService {
       kind,
       voiceAgentVersionId,
     );
-    let result: CreateMessageResult;
+    let result: CreateMessageResult & { meta: RouteMeta };
     try {
-      result = await this.claude.createMessage(params);
+      result = await this.router.run(kind, params);
     } catch (error) {
       await this.releaseCredits(reservation, 'provider_error');
       throw error;
@@ -252,13 +279,14 @@ export class AiInfraService {
       toolCalls,
       voiceAgentVersionId,
       reservation,
+      result.meta,
     );
     return result;
   }
 
   /**
    * Exposed separately (not folded into `createMessage`) for AssistantService's
-   * streamed tool-use loop (BE-074), which calls `ClaudeClient.streamMessage`
+   * streamed tool-use loop (BE-074), which calls `AiRouterService.stream`
    * directly and reconstructs its own CreateMessageResult from the SSE
    * stream — it still needs the exact same rate-limit/cost-cap/logging path.
    *
@@ -308,6 +336,8 @@ export class AiInfraService {
     voiceAgentVersionId?: string,
     /** The credit reservation made for this call (see `reserveCredits`); committed at actual. */
     reservation?: Reservation | null,
+    /** Which route/provider/model answered (from `AiRouterService`) — written to `ai_usage`. */
+    route?: RouteMeta,
   ): Promise<void> {
     await this.logCall(
       businessId,
@@ -315,6 +345,7 @@ export class AiInfraService {
       result,
       toolCalls,
       voiceAgentVersionId,
+      route,
     );
     await this.commitCredits(
       reservation,
@@ -367,10 +398,18 @@ export class AiInfraService {
     result: CreateMessageResult,
     toolCalls?: unknown,
     voiceAgentVersionId?: string,
+    route?: RouteMeta,
   ): Promise<void> {
-    const cost =
-      result.inputTokens * HAIKU_INPUT_COST_PER_TOKEN +
-      result.outputTokens * HAIKU_OUTPUT_COST_PER_TOKEN;
+    const model = route?.model ?? result.model ?? 'unknown';
+    const provider = route?.provider ?? result.provider ?? 'unknown';
+    const cached = result.cachedInputTokens ?? 0;
+    // Priced at the model that actually answered, so the monthly cost cap is real.
+    const cost = costUsd(
+      model,
+      result.inputTokens,
+      result.outputTokens,
+      cached,
+    );
 
     const log = await this.prisma.aiCallLog.create({
       data: {
@@ -383,12 +422,29 @@ export class AiInfraService {
         voiceAgentVersionId,
       },
     });
+    // Spec §5.5 — one ai_usage row per successful routed call.
+    await this.prisma.aiUsage.create({
+      data: {
+        businessId: businessId ?? null,
+        kind,
+        operation: route?.operation ?? result.operation ?? kind,
+        tier: route?.tier ?? result.tier ?? 'unknown',
+        provider,
+        model,
+        tokensIn: result.inputTokens,
+        tokensOut: result.outputTokens,
+        cachedIn: cached,
+        costCents: cost * 100,
+        latencyMs: route?.latencyMs ?? result.latencyMs ?? 0,
+        usedFallback: route?.usedFallback ?? result.usedFallback ?? false,
+      },
+    });
     if (businessId && VOICE_TEXT_KINDS.has(kind)) {
       await this.prisma.voiceUsageRecord.create({
         data: {
           businessId,
-          eventKey: `anthropic:voice:${log.id}`,
-          provider: 'anthropic',
+          eventKey: `${provider}:voice:${log.id}`,
+          provider,
           unit: 'voice_text_tokens',
           quantity: result.inputTokens + result.outputTokens,
           cost,
@@ -397,7 +453,8 @@ export class AiInfraService {
           evidence: {
             inputTokens: result.inputTokens,
             outputTokens: result.outputTokens,
-            costBasis: 'haiku_default_list_price_estimate',
+            model,
+            costBasis: 'routed_model_list_price_estimate',
             voiceAgentVersionId: voiceAgentVersionId ?? null,
           },
         },

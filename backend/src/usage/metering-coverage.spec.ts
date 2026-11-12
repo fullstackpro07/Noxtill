@@ -87,15 +87,16 @@ describe('AI metering coverage (spec §8.1)', () => {
   });
 
   it('only allow-listed files call the model clients directly', () => {
-    // Each of these meters its own usage: AiInfraService itself, the assistant's streamed turn
-    // (reserves/commits through AiInfraService), live voice (billed as call minutes), Whisper
-    // transcription (its own meter) and the pre-signup business-type mapper (no business yet).
+    // Each of these meters its own usage: AiInfraService itself, the routing layer's provider
+    // adapters (only ever called by AiRouterService, which only AiInfraService and the
+    // assistant's metered streamed turn call), live voice (billed as call minutes) and
+    // speech-to-text transcription (its own meter).
     const allow = [
       'ai/ai-infra.service.ts',
-      'ai/claude.client.ts',
+      'ai/routing/providers/anthropic.provider.ts',
+      'ai/routing/providers/openai.provider.ts',
+      'ai/routing/providers/google.provider.ts',
       'ai/speech-to-text.service.ts',
-      'assistant/assistant.service.ts',
-      'customer-import/customer-import.parser.ts',
       'voice/voice-realtime.gateway.ts',
       'voice/voice-realtime-sandbox.service.ts',
     ].map((p) => path.normalize(p));

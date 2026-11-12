@@ -586,7 +586,7 @@ export interface DigitizerRow {
   id: string;
   destination: DigitizerDestination;
   data: DigitizerRowData;
-  /** Claude's own self-reported 0-1 confidence for this row's extraction — never per-field, per-row. */
+  /** The vision model's own self-reported 0-1 confidence for this row's extraction — never per-field, per-row. */
   confidence: number;
   corrected: boolean;
   action: "commit" | "skip";

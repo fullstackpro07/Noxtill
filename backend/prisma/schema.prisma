@@ -5471,6 +5471,31 @@ model AiCallLog {
   @@map("ai_call_logs")
 }
 
+/// AI Model Routing spec §5.5 — one row per successful routed model call: which official
+/// operation ran, on which tier/provider/model, real tokens, cost, latency and whether the
+/// fallback answered. `kind` keeps the originating call site. Not tenant-scoped via CLS:
+/// written by AiInfraService with an explicit (nullable, pre-signup) businessId.
+model AiUsage {
+  id           String   @id @default(uuid())
+  businessId   String?  @map("business_id")
+  kind         String   @db.VarChar(64)
+  operation    String   @db.VarChar(64)
+  tier         String   @db.VarChar(16)
+  provider     String   @db.VarChar(32)
+  model        String   @db.VarChar(64)
+  tokensIn     Int      @map("tokens_in")
+  tokensOut    Int      @map("tokens_out")
+  cachedIn     Int      @default(0) @map("cached_in")
+  costCents    Decimal  @map("cost_cents") @db.Decimal(12, 4)
+  latencyMs    Int      @map("latency_ms")
+  usedFallback Boolean  @default(false) @map("used_fallback")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, createdAt], map: "ai_usage_business_created_idx")
+  @@index([operation, createdAt], map: "ai_usage_operation_created_idx")
+  @@map("ai_usage")
+}
+
 /// RAG help-pipeline source content (BE-073) — small enough that a keyword/
 /// trigram hybrid over this table is plenty; no separate vector store needed.
 model HelpArticle {

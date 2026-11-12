@@ -300,7 +300,7 @@ export const WORKFLOW_ACTION_CATALOG: WorkflowActionCatalogEntry[] = [
     effect: 'AI generation',
     risk: 'medium',
     requiresCustomerContext: false,
-    provider: 'Anthropic Claude',
+    provider: 'Noxtill AI (model routed per operation)',
     setup:
       'Requires server-side AI configuration and the business AI feature to be enabled.',
     inputs: [
@@ -431,7 +431,8 @@ export const WORKFLOW_ACTION_CATALOG: WorkflowActionCatalogEntry[] = [
     effect: 'AI generation',
     risk: 'low',
     requiresCustomerContext: false,
-    provider: 'Anthropic Claude through AI Settings guardrails',
+    provider:
+      'Noxtill AI (model routed per operation) through AI Settings guardrails',
     setup:
       'Requires the server AI provider key and "Workflow AI drafts & agents" switched on in AI Settings. Add a message or approval step after it to act on the answer.',
     inputs: [

@@ -37,6 +37,7 @@ describe('WorkflowTriggerService (UPD-BE-028)', () => {
       stopReason: 'end_turn',
       inputTokens: 18,
       outputTokens: 7,
+      provider: 'test-provider',
     }),
   };
 
@@ -193,7 +194,7 @@ describe('WorkflowTriggerService (UPD-BE-028)', () => {
         type: 'generate_ai_draft',
         completed: true,
         aiGenerated: true,
-        provider: 'anthropic',
+        provider: 'test-provider',
         output: 'Thank you for your order.',
         inputTokens: 18,
         outputTokens: 7,
