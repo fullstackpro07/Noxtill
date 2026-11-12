@@ -38,6 +38,8 @@ backend/local-storage/
 
 # ── Frontend (Next.js) ───────────────────────────────────────────────────
 frontend/.next/
+# Stray .next at repo root (Next started from the wrong directory)
+/.next/
 frontend/out/
 frontend/build/
 frontend/coverage/
