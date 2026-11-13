@@ -8,7 +8,13 @@ import {
   SubscriptionWithPlan,
 } from './entitlements.service';
 import { RemediesService } from './remedies.service';
-import { CapGroup, MetricCode, USAGE_ERROR_CODES } from './usage.constants';
+import {
+  CapGroup,
+  METRICS,
+  MetricCode,
+  STORAGE_PACK_BYTES,
+  USAGE_ERROR_CODES,
+} from './usage.constants';
 import { formatDateUtc, usageWindow } from './usage-period.util';
 
 export interface RecordInput {
@@ -153,6 +159,47 @@ export class MetersService {
     }));
     this.priceCache = { at: Date.now(), rows: out };
     return out;
+  }
+
+  /**
+   * The plan's number for a metric (plus purchased extras) and the current usage window. A null
+   * limit means the plan sets no number (Enterprise: custom), so callers do not cap it.
+   */
+  async planLimit(
+    businessId: string,
+    metric: MetricCode,
+  ): Promise<{
+    rootId: string;
+    limit: number | null;
+    planName: string;
+    trialing: boolean;
+    windowStart: Date;
+    windowEnd: Date;
+  }> {
+    const rootId = await this.entitlements.rootId(businessId);
+    const sub = await this.entitlements.ensureSubscription(rootId);
+    const win = usageWindow(sub, new Date());
+    const included = this.entitlements.includedFor(sub, metric);
+    let limit: number | null = null;
+    if (included != null) {
+      const purchased = await this.entitlements.purchasedCapacity(
+        rootId,
+        metric,
+      );
+      limit =
+        included +
+        (metric === METRICS.STORAGE_BYTES
+          ? purchased * STORAGE_PACK_BYTES
+          : purchased);
+    }
+    return {
+      rootId,
+      limit,
+      planName: sub.plan.name,
+      trialing: sub.status === 'trialing',
+      windowStart: win.start,
+      windowEnd: win.end,
+    };
   }
 
   /** Price per ONE unit, or null when no price is published for that metric/country. */

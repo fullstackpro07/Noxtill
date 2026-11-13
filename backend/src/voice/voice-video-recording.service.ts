@@ -200,7 +200,11 @@ export class VoiceVideoRecordingService {
       .filter((value): value is string => Boolean(value))
       .join('\n\n');
     const noticeHash = createHash('sha256').update(notice).digest('hex');
-    const expiresAt = new Date(now.getTime() + retentionDays * 86_400_000);
+    // The plan caps how long meeting recordings are kept (pricing page C8: 30 / 90 days).
+    const keptDays =
+      (await this.limits?.meetingRetentionDays(businessId, retentionDays)) ??
+      retentionDays;
+    const expiresAt = new Date(now.getTime() + keptDays * 86_400_000);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM voice_video_meetings WHERE id = ${meetingId} AND business_id = ${businessId} FOR UPDATE`;

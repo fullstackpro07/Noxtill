@@ -14,7 +14,8 @@ import { CreateWalkInAppointmentDto } from '../bookings/dto/create-walk-in-appoi
 import { buildFulltextBooleanQuery } from '../common/utils/mysql-fulltext.util';
 import { MissedCallService } from './missed-call.service';
 import { VoiceHumanAgentDispatchService } from './voice-human-agent-dispatch.service';
-import { voiceSoftphoneIdentity } from './voice-softphone.util';
+import { agentDialTarget, softphoneConfigured } from './voice-softphone.util';
+import { METRICS } from '../usage/usage.constants';
 import { VoiceCallQueueService } from './voice-call-queue.service';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import {
@@ -315,6 +316,16 @@ export class VoiceCallService {
     }
 
     const callStartedAt = new Date();
+    // The plan's concurrent-call limit (pricing page I8: 5 / 15 / 40). Over it, the caller hears
+    // a normal busy signal; calls already connected are never cut off.
+    const concurrentLimit = testCall
+      ? null
+      : ((
+          await this.meters?.planLimit(
+            phoneNumber.businessId,
+            METRICS.CONCURRENT_CALLS,
+          )
+        )?.limit ?? null);
     const call = await this.prisma.$transaction(async (tx) => {
       // Serialise admissions per business so simultaneous Twilio webhooks cannot exceed the cap.
       // The existing business row is the mutex; this is a short transaction and no provider call
@@ -348,6 +359,16 @@ export class VoiceCallService {
                 isTestCall: false,
               },
             });
+      if (concurrentLimit !== null) {
+        const live = await tx.phoneCall.count({
+          where: {
+            businessId: phoneNumber.businessId,
+            status: PhoneCallStatus.in_progress,
+            isTestCall: false,
+          },
+        });
+        if (live >= concurrentLimit) return null;
+      }
       const spending = await voiceSpendState(tx, phoneNumber.businessId);
       const capReached =
         spending.reached ||
@@ -429,6 +450,12 @@ export class VoiceCallService {
         });
       return admitted;
     });
+
+    if (!call) {
+      if (usageHoldId)
+        await this.meters?.releaseHold(usageHoldId, 'concurrent call limit');
+      return twiml('<Reject reason="busy"/>');
+    }
 
     if (usageHoldId && (call.quotaRejectedAt || !call.voiceAgentVersionId)) {
       await this.meters?.releaseHold(usageHoldId, 'call not handled by AI');
@@ -1294,8 +1321,13 @@ export class VoiceCallService {
         callStatus === 'failed' ||
         callStatus === 'canceled');
 
+    const policyDays = call.recordingRetentionDays ?? RECORDING_RETENTION_DAYS;
+    // The plan caps how long call recordings are kept (pricing page C8: 60 / 90 / 180 days).
+    const planDays = (
+      await this.meters?.planLimit(call.businessId, METRICS.CALL_RECORDING_DAYS)
+    )?.limit;
     const retentionDays =
-      call.recordingRetentionDays ?? RECORDING_RETENTION_DAYS;
+      planDays == null ? policyDays : Math.min(policyDays, planDays);
     const updated = await this.prisma.phoneCall.updateMany({
       where: {
         id: call.id,
@@ -1805,9 +1837,12 @@ export class VoiceCallService {
         staffUserId: later.staffUserId,
         attemptNumber: later.attemptNumber,
         name: later.profile.staffUser.user.name,
-        phone:
-          later.profile.staffUser.user.phone ??
-          `client:${voiceSoftphoneIdentity(call.businessId, later.profileId)}`,
+        phone: agentDialTarget(
+          later.profile.staffUser.user.phone,
+          call.businessId,
+          later.profileId,
+          softphoneConfigured((k) => this.config.get<string>(k)),
+        ),
       });
       if (resumed) {
         await finishProjection();

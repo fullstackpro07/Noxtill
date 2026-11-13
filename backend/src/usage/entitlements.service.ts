@@ -20,6 +20,8 @@ import {
   MetricCode,
   TRIAL_DAYS,
   TRIAL_PLAN_KEY,
+  billableDigitizerPages,
+  STORAGE_PACK_BYTES,
 } from './usage.constants';
 import {
   addDaysUtc,
@@ -394,6 +396,8 @@ export class EntitlementsService {
       websites,
       integrations,
       agents,
+      pagesBefore,
+      unpagedBefore,
     ] = await Promise.all([
       this.prisma.usageEvent.groupBy({
         by: ['metricCode'],
@@ -436,6 +440,25 @@ export class EntitlementsService {
       this.prisma.voiceHumanAgentProfile.count({
         where: { ...inGroup, active: true },
       }),
+      // Pages scanned before this window, to spend the one-time free setup pages first.
+      this.prisma.importBatch.aggregate({
+        where: {
+          ...inGroup,
+          source: 'photo',
+          createdAt: { lt: win.start },
+          status: { not: 'failed' },
+        },
+        _sum: { pageCount: true },
+      }),
+      this.prisma.importBatch.count({
+        where: {
+          ...inGroup,
+          source: 'photo',
+          createdAt: { lt: win.start },
+          status: { not: 'failed' },
+          pageCount: null,
+        },
+      }),
     ]);
     const fromEvents: Record<string, number> = {};
     for (const e of events)
@@ -443,8 +466,12 @@ export class EntitlementsService {
     return {
       ...fromEvents,
       automation_runs: runs,
-      // A scan with no recorded page count is one page.
-      digitizer_pages: (pages._sum.pageCount ?? 0) + unpaged,
+      // A scan with no recorded page count is one page. The first FREE_SETUP_PAGES pages a
+      // business ever scans are free (pricing page C15), on top of the monthly allowance.
+      digitizer_pages: billableDigitizerPages(
+        (pagesBefore._sum.pageCount ?? 0) + unpagedBefore,
+        (pages._sum.pageCount ?? 0) + unpaged,
+      ),
       seo_keywords: keywords,
       esign_transactions: esign,
       websites,
@@ -585,6 +612,9 @@ export class EntitlementsService {
       if (code === METRICS.LOCATIONS) usedQty = locations;
       if (code === METRICS.PHONE_NUMBERS_LOCAL) usedQty = numbers.local;
       if (code === METRICS.PHONE_NUMBERS_TOLLFREE) usedQty = numbers.tollfree;
+      // Extra storage is bought in 100 GB packs; the limit is in bytes.
+      if (code === METRICS.STORAGE_BYTES)
+        purchasedQty = purchasedQty * STORAGE_PACK_BYTES;
       if (code === METRICS.AI_CREDITS) {
         inc = credit ? credit.includedQuantity : included;
         usedQty = credit ? credit.includedUsed + credit.purchasedUsed : 0;

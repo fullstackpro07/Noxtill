@@ -56,6 +56,11 @@ export const METRICS = {
   VIDEO_PARTICIPANTS: 'video_participants',
   INTELLIGENCE_RUNS: 'intelligence_runs',
   VIDEO_RECORDING_MINUTES: 'video_recording_minutes',
+  CALL_RECORDING_DAYS: 'call_recording_days',
+  MEETING_RECORDING_DAYS: 'meeting_recording_days',
+  CONCURRENT_CALLS: 'concurrent_calls',
+  API_REQUESTS: 'api_requests',
+  WEBSITE_BANDWIDTH_MB: 'website_bandwidth_mb',
   TRANSCRIPTION_MINUTES: 'transcription_minutes',
   AI_PHONE_RECEPTIONIST: 'ai_phone_receptionist',
 } as const;
@@ -266,6 +271,56 @@ export const METER_SEEDS: MeterSeed[] = [
     enforced: false,
   },
   {
+    metricCode: 'call_recording_days',
+    displayName: 'Call recordings kept (days)',
+    unit: 'day',
+    kind: 'capacity',
+    provider: null,
+    resetRule: 'none',
+    isBillable: false,
+    enforced: false,
+  },
+  {
+    metricCode: 'meeting_recording_days',
+    displayName: 'Meeting recordings kept (days)',
+    unit: 'day',
+    kind: 'capacity',
+    provider: null,
+    resetRule: 'none',
+    isBillable: false,
+    enforced: false,
+  },
+  {
+    metricCode: 'concurrent_calls',
+    displayName: 'Concurrent calls',
+    unit: 'call',
+    kind: 'capacity',
+    provider: null,
+    resetRule: 'none',
+    isBillable: false,
+    enforced: false,
+  },
+  {
+    metricCode: 'api_requests',
+    displayName: 'API requests',
+    unit: 'request',
+    kind: 'allowance',
+    provider: null,
+    resetRule: 'period',
+    isBillable: false,
+    enforced: false,
+  },
+  {
+    metricCode: 'website_bandwidth_mb',
+    displayName: 'Website bandwidth',
+    unit: 'MB',
+    kind: 'allowance',
+    provider: null,
+    resetRule: 'period',
+    isBillable: false,
+    enforced: false,
+  },
+  {
     metricCode: 'video_recording_minutes',
     displayName: 'Meeting recording minutes',
     unit: 'minute',
@@ -467,6 +522,120 @@ export const INTELLIGENCE_RUN_LIMITS: Record<string, number | null> = {
   business: 150,
 };
 
+const GB = 1024 ** 3;
+/** Bytes in one extra-storage pack ($5 per 100 GB per month). Purchases store a pack count. */
+export const STORAGE_PACK_BYTES = 100 * GB;
+
+/**
+ * Per-plan numbers from the pricing page (usage limits section). null = custom / not capped here
+ * (Enterprise). Seeded into plan_entitlements; existing rows are filled by the ops script.
+ */
+export const PLAN_LIMITS: Record<
+  string,
+  {
+    kind: EntitlementKind;
+    resetRule: ResetRule;
+    byPlan: Record<string, number | null>;
+  }
+> = {
+  storage_bytes: {
+    kind: 'allowance',
+    resetRule: 'none',
+    byPlan: {
+      trial: 10 * GB,
+      starter: 10 * GB,
+      growth: 50 * GB,
+      professional: 200 * GB,
+      business: 500 * GB,
+      enterprise: null,
+    },
+  },
+  digitizer_pages: {
+    kind: 'allowance',
+    resetRule: 'period',
+    byPlan: {
+      trial: 50,
+      starter: 50,
+      growth: 200,
+      professional: 1000,
+      business: 3000,
+      enterprise: null,
+    },
+  },
+  call_recording_days: {
+    kind: 'capacity',
+    resetRule: 'none',
+    byPlan: {
+      trial: 60,
+      starter: 0,
+      growth: 60,
+      professional: 90,
+      business: 180,
+      enterprise: null,
+    },
+  },
+  meeting_recording_days: {
+    kind: 'capacity',
+    resetRule: 'none',
+    byPlan: {
+      trial: 0,
+      starter: 0,
+      growth: 0,
+      professional: 30,
+      business: 90,
+      enterprise: null,
+    },
+  },
+  concurrent_calls: {
+    kind: 'capacity',
+    resetRule: 'none',
+    byPlan: {
+      trial: 5,
+      starter: null,
+      growth: 5,
+      professional: 15,
+      business: 40,
+      enterprise: null,
+    },
+  },
+  api_requests: {
+    kind: 'allowance',
+    resetRule: 'period',
+    byPlan: {
+      trial: 10_000,
+      starter: 10_000,
+      growth: 50_000,
+      professional: 250_000,
+      business: 1_000_000,
+      enterprise: null,
+    },
+  },
+  website_bandwidth_mb: {
+    kind: 'allowance',
+    resetRule: 'period',
+    byPlan: {
+      trial: 100 * 1024,
+      starter: null,
+      growth: 100 * 1024,
+      professional: 250 * 1024,
+      business: 1024 * 1024,
+      enterprise: null,
+    },
+  },
+};
+
+/** One-time free setup scanning on every plan (pricing page C15). */
+export const FREE_SETUP_PAGES = 300;
+
+/** Pages this window that count against the monthly allowance, after the free setup pages. */
+export function billableDigitizerPages(
+  pagesBeforeWindow: number,
+  pagesInWindow: number,
+): number {
+  const freeLeft = Math.max(0, FREE_SETUP_PAGES - pagesBeforeWindow);
+  return Math.max(0, pagesInWindow - freeLeft);
+}
+
 export const TRIAL_PLAN_KEY = 'trial';
 export const ENTERPRISE_PLAN_KEY = 'enterprise';
 export const TRIAL_DAYS = 14;
@@ -519,6 +688,10 @@ export const PRICE_SEEDS: PriceSeed[] = [
   { metricCode: 'users', unitPriceUsd: 10 },
   { metricCode: 'locations', unitPriceUsd: 39 },
   { metricCode: 'ai_credits', unitPriceUsd: 10, per: 1000 },
+  // Priced per pack: a purchase's quantity is a count of 100 GB packs.
+  { metricCode: 'storage_bytes', unitPriceUsd: 5 },
+  { metricCode: 'video_minutes', unitPriceUsd: 10, per: 1000 },
+  { metricCode: 'video_recording_minutes', unitPriceUsd: 5, per: 600 },
 ];
 
 /** What can be bought from the Usage screens (spec §3.2 + design buy dialogs). */
@@ -558,6 +731,25 @@ export const PURCHASABLES = {
     quantity: 1,
     recurring: true,
     label: '1 human agent seat',
+  },
+  storage: {
+    metricCode: 'storage_bytes',
+    // A pack count: entitlements convert packs to bytes (STORAGE_PACK_BYTES).
+    quantity: 1,
+    recurring: true,
+    label: '100 GB extra storage',
+  },
+  videominutes: {
+    metricCode: 'video_minutes',
+    quantity: 1000,
+    recurring: true,
+    label: '1,000 extra video meeting minutes per month',
+  },
+  recordinghours: {
+    metricCode: 'video_recording_minutes',
+    quantity: 600,
+    recurring: true,
+    label: '10 extra hours of meeting recording per month',
   },
 } as const;
 export type PurchaseKey = keyof typeof PURCHASABLES;

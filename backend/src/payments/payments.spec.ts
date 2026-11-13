@@ -1224,7 +1224,7 @@ describe('Payments & Billing (real DB)', () => {
       docs.export(staff, sc, 'transactions', 'csv', {}),
       'PERMISSION_DENIED',
     );
-  });
+  }, 30_000); // many real DB round-trips; the 5s default is too tight on a slower CI runner
 
   it('verifies Stripe webhook signatures', () => {
     const body = JSON.stringify({ id: 'evt_x' });

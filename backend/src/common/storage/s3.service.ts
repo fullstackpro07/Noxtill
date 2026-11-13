@@ -83,12 +83,24 @@ export class S3Service {
     }
   }
 
+  private uploadGuard:
+    ((key: string, sizeBytes: number) => Promise<void>) | null = null;
+
+  /**
+   * Usage & Limits registers the storage allowance check here once at boot, so every upload in
+   * every module is checked without each call site knowing about plans.
+   */
+  setUploadGuard(guard: (key: string, sizeBytes: number) => Promise<void>) {
+    this.uploadGuard = guard;
+  }
+
   /** Whether files are kept on this server's disk (development) or in S3-compatible object storage. */
   storageMode(): 'local' | 's3' {
     return this.useLocalStorage ? 'local' : 's3';
   }
 
   async upload(key: string, body: Buffer, contentType: string): Promise<void> {
+    if (this.uploadGuard) await this.uploadGuard(key, body.length);
     if (this.useLocalStorage) {
       await this.localWrite(key, body, contentType);
       return;

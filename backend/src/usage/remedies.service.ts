@@ -14,6 +14,9 @@ const PURCHASE_FOR_METRIC: Record<string, PurchaseKey> = {
   phone_numbers_local: 'localnum',
   phone_numbers_tollfree: 'tollfree',
   agent_seats: 'agentseat',
+  storage_bytes: 'storage',
+  video_minutes: 'videominutes',
+  video_recording_minutes: 'recordinghours',
 };
 
 /**

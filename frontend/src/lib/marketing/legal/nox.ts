@@ -116,7 +116,7 @@ interface Nox {
   consentSchema: { table: NoxTable; rule: string };
   modules: NoxModule[];
   aiRegister: { table: NoxTable };
-  paddle: { asOf: string; regions: { key: string; region: string; period: string }[]; regionsNote: string };
+  withdrawal: { asOf: string; regions: { key: string; region: string; period: string }[]; regionsNote: string };
   seo: Record<string, NoxSeo>;
   routes: NoxRoute[];
   history: { version: string; date: string; summary: string; current: boolean }[];

@@ -206,7 +206,7 @@ export const fetchVoiceUsage = () => apiFetch<VoiceUsage>("/usage/voice");
 export const updateSpendCap = (group: "voice" | "messaging", body: { capUsd: number; maxCallMinutes?: number }) =>
   apiFetch<Record<string, SpendCapState>>(`/usage/spend-caps/${group}`, { method: "PUT", body: JSON.stringify(body) });
 
-export type PurchaseKey = "credits" | "seat" | "location" | "localnum" | "tollfree" | "agentseat";
+export type PurchaseKey = "credits" | "seat" | "location" | "localnum" | "tollfree" | "agentseat" | "storage" | "videominutes" | "recordinghours";
 export const startPurchase = (key: PurchaseKey, country?: string) =>
   apiFetch<{ status: "checkout" | "active"; checkoutUrl?: string; purchaseId: string }>("/usage/purchase", {
     method: "POST",

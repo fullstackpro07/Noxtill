@@ -712,18 +712,26 @@ function CategoryBody({ o, title, desc, rows, rules, module, extra }: { o: Usage
 
 export function StoragePage() {
   const q = useUsageOverview();
+  const [buyKey, setBuyKey] = useState<PurchaseKey | null>(null);
+  const t = useToast();
   if (!q.data) return null;
   const o = q.data;
   const st = o.storage;
   return (
+    <>
     <CategoryBody
       o={o}
       title="Storage & documents"
       desc="Files, attachments, documents and generated files your workspace keeps."
-      rows={[{ name: "File storage", note: st ? `${fmtInt(st.objects)} files${st.truncated ? " (very large — total is a lower bound)" : ""}` : "Storage usage couldn't be measured right now", m: o.set.metrics.storage_bytes, unit: "bytes", price: "Not set yet", usedText: st ? bytes(st.bytes) : "—" }]}
-      rules={["Each file is counted once, at its stored size.", "Storing documents never uses AI credits.", "Once a storage allowance is set, a file's size is checked before it's accepted."]}
+      rows={[{ name: "File storage", note: st ? `${fmtInt(st.objects)} files${st.truncated ? " (very large — total is a lower bound)" : ""}` : "Storage usage couldn't be measured right now", m: o.set.metrics.storage_bytes, unit: "bytes", price: "$5 per 100 GB / month", usedText: st ? bytes(st.bytes) : "—" }]}
+      rules={["Each file is counted once, at its stored size.", "Storing documents never uses AI credits.", "A file's size is checked against your storage allowance before it's accepted. Data exports are always allowed, even when storage is full.", "Recordings are removed automatically at the end of their retention period."]}
       extra={
-        st && st.areas.length ? (
+        <>
+        <section style={{ ...section, padding: "14px 20px", display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: U.text2 }}>Need more space? Extra storage is added to your subscription.</span>
+          <BuyButton o={o} k="storage" onOpen={setBuyKey} />
+        </section>
+        {st && st.areas.length ? (
           <section style={{ ...section, overflow: "hidden" }}>
             <div style={{ padding: "16px 20px 10px" }}>
               <h2 style={h2}>By category</h2>
@@ -739,9 +747,12 @@ export function StoragePage() {
                 </div>
               ))}
           </section>
-        ) : null
+        ) : null}
+        </>
       }
     />
+    {buyKey ? <BuyDialog o={o} k={buyKey} onClose={() => setBuyKey(null)} onDone={(msg) => { setBuyKey(null); t.flash(msg); }} /> : null}
+    </>
   );
 }
 

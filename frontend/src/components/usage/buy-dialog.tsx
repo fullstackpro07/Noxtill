@@ -12,6 +12,9 @@ const DEFS: Record<PurchaseKey, { title: string; item: string; metric: string; b
   location: { title: "Add a location", item: "1 additional location", metric: "locations", billing: "Added to your subscription", recurring: true, note: "The location is added once payment is confirmed." },
   localnum: { title: "Add a local phone number", item: "1 local phone number", metric: "phone_numbers_local", billing: "Monthly rental", recurring: true, note: "You choose the number and connect it in AI Phone Receptionist. It becomes available once payment is confirmed." },
   tollfree: { title: "Add a toll-free number", item: "1 toll-free number", metric: "phone_numbers_tollfree", billing: "Monthly rental", recurring: true, note: "Only available where the phone provider supports toll-free numbers. It becomes available once payment is confirmed." },
+  storage: { title: "Add 100 GB of storage", item: "100 GB extra storage", metric: "storage_bytes", billing: "Added to your subscription", recurring: true, note: "Space for recordings, scanned documents, product images and attachments. Added once payment is confirmed." },
+  videominutes: { title: "Add video meeting minutes", item: "1,000 participant-minutes every month", metric: "video_minutes", billing: "Added to your subscription", recurring: true, note: "Added to your monthly video meeting allowance once payment is confirmed." },
+  recordinghours: { title: "Add meeting recording hours", item: "10 recording hours every month", metric: "video_recording_minutes", billing: "Added to your subscription", recurring: true, note: "Added to your monthly meeting recording allowance once payment is confirmed." },
   agentseat: { title: "Add a human agent seat", item: "1 human agent seat", metric: "agent_seats", billing: "Monthly seat", recurring: true, note: "Agent seats are separate from Noxtill user seats. The seat is added once payment is confirmed." },
 };
 
@@ -24,7 +27,7 @@ export function buyLabel(o: UsageOverview, key: PurchaseKey): string {
   const d = DEFS[key];
   const p = priceFor(o.prices, d.metric);
   if (p == null) return d.title;
-  const short = { credits: "Buy 1,000 credits", seat: "Add a seat", location: "Add a location", localnum: "Add local number", tollfree: "Add toll-free number", agentseat: "Add agent seat" }[key];
+  const short = { credits: "Buy 1,000 credits", seat: "Add a seat", location: "Add a location", localnum: "Add local number", tollfree: "Add toll-free number", agentseat: "Add agent seat", storage: "Add 100 GB", videominutes: "Add 1,000 video minutes", recordinghours: "Add 10 recording hours" }[key];
   if (key === "localnum" || key === "tollfree") return `${short} · from ${money2(p).replace(".00", "")}/month`;
   return `${short} · ${key === "credits" ? money2(p).replace(".00", "") : `${money2(p).replace(".00", "")}/month`}`;
 }

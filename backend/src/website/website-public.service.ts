@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Optional, Logger } from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
+import { METRICS } from '../usage/usage.constants';
 import { ProductKind, WebsitePageKind } from '@prisma/client';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { S3Service } from '../common/storage/s3.service';
@@ -23,9 +25,78 @@ export class WebsitePublicService {
     private readonly prisma: PrismaService,
     private readonly forms: WebsiteFormsService,
     private readonly s3: S3Service,
+    @Optional() private readonly meters?: MetersService,
   ) {}
 
+  /**
+   * Website bandwidth (pricing page I9: 100 GB / 250 GB / 1 TB a month). Counts the page data
+   * this server sends for the hosted site, per usage period. Images and files are served from
+   * storage and count towards the storage allowance instead. Over the limit, visitors see a
+   * notice until the next period; the owner has had alerts at 50/75/90%.
+   */
   async render(slug: string, rawPath: string, query?: string) {
+    const business = this.meters
+      ? await this.prisma.business.findUnique({
+          where: { slug },
+          select: { id: true, name: true },
+        })
+      : null;
+    const plan = business
+      ? await this.meters!.planLimit(business.id, METRICS.WEBSITE_BANDWIDTH_MB)
+      : null;
+    if (business && plan?.limit != null) {
+      const row = await this.prisma.allowance.findUnique({
+        where: {
+          businessId_metricCode_periodStart: {
+            businessId: plan.rootId,
+            metricCode: METRICS.WEBSITE_BANDWIDTH_MB,
+            periodStart: plan.windowStart,
+          },
+        },
+        select: { usedQuantity: true },
+      });
+      if (row && Number(row.usedQuantity) >= plan.limit) {
+        return {
+          state: 'maintenance' as const,
+          businessName: business.name,
+          message: `This website has reached its monthly traffic allowance and will be back on ${plan.windowEnd.toISOString().slice(0, 10)}.`,
+          theme: null,
+        };
+      }
+    }
+    const result = await this.renderSite(slug, rawPath, query);
+    if (
+      business &&
+      plan &&
+      result.state !== 'not_found' &&
+      result.state !== 'not_published'
+    ) {
+      const mb = Buffer.byteLength(JSON.stringify(result)) / (1024 * 1024);
+      await this.prisma.allowance
+        .upsert({
+          where: {
+            businessId_metricCode_periodStart: {
+              businessId: plan.rootId,
+              metricCode: METRICS.WEBSITE_BANDWIDTH_MB,
+              periodStart: plan.windowStart,
+            },
+          },
+          create: {
+            businessId: plan.rootId,
+            metricCode: METRICS.WEBSITE_BANDWIDTH_MB,
+            periodStart: plan.windowStart,
+            periodEnd: plan.windowEnd,
+            includedQuantity: plan.limit,
+            usedQuantity: mb,
+          },
+          update: { usedQuantity: { increment: mb } },
+        })
+        .catch(() => undefined); // Metering never takes a live site down on its own.
+    }
+    return result;
+  }
+
+  private async renderSite(slug: string, rawPath: string, query?: string) {
     const business = await this.prisma.business.findUnique({ where: { slug } });
     if (!business) return { state: 'not_found' as const };
     const site = await this.prisma.websiteSite.findUnique({
