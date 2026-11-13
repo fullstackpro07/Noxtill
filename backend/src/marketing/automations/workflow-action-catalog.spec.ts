@@ -41,6 +41,9 @@ describe('WORKFLOW_ACTION_CATALOG', () => {
 
     expect(
       WORKFLOW_ACTION_CATALOG.find(({ type }) => type === 'generate_ai_draft'),
-    ).toMatchObject({ provider: 'Anthropic Claude', effect: 'AI generation' });
+    ).toMatchObject({
+      provider: 'Noxtill AI (model routed per operation)',
+      effect: 'AI generation',
+    });
   });
 });

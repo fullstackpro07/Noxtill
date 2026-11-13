@@ -19,18 +19,28 @@ describe('VoiceMeetingArtifactsService (real MySQL; simulated providers)', () =>
     readObject: jest.fn(() => Promise.resolve(audio)),
     delete: jest.fn(() => Promise.resolve(undefined)),
   };
-  const ai = {
-    checkGuardrails: jest.fn(() => Promise.resolve(undefined)),
-    complete: jest.fn(() =>
-      Promise.resolve(
-        JSON.stringify({
-          summary:
-            'The customer reviewed the service options and requested a follow-up.',
-          followUpDraft:
-            'Thanks for meeting. A team member will follow up about the service options.',
-        }),
-      ),
+  const complete = jest.fn((..._args: unknown[]) =>
+    Promise.resolve(
+      JSON.stringify({
+        summary:
+          'The customer reviewed the service options and requested a follow-up.',
+        followUpDraft:
+          'Thanks for meeting. A team member will follow up about the service options.',
+      }),
     ),
+  );
+  const ai = {
+    checkGuardrails: jest.fn((..._args: unknown[]) =>
+      Promise.resolve(undefined),
+    ),
+    complete,
+    // The service calls completeDetailed (text + which provider answered); delegate to `complete`
+    // so tests keep controlling the text and asserting the call arguments in one place.
+    completeDetailed: jest.fn(async (...args: unknown[]) => ({
+      text: await complete(...args),
+      provider: 'openai',
+      model: 'test-model',
+    })),
   };
   const speechToText = {
     transcribeWithMetrics: jest.fn(() =>
