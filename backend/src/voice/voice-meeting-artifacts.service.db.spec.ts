@@ -21,6 +21,13 @@ describe('VoiceMeetingArtifactsService (real MySQL; simulated providers)', () =>
   };
   const ai = {
     checkGuardrails: jest.fn(() => Promise.resolve(undefined)),
+    // The service calls completeDetailed (text + which provider answered); delegate to `complete`
+    // so tests keep controlling the text and asserting the call arguments in one place.
+    completeDetailed: jest.fn(async (...args: unknown[]) => ({
+      text: (await (ai.complete as jest.Mock)(...args)) as string,
+      provider: 'openai',
+      model: 'test-model',
+    })),
     complete: jest.fn(() =>
       Promise.resolve(
         JSON.stringify({

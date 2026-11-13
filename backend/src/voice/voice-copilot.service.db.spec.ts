@@ -1,3 +1,4 @@
+import { AiNotConfiguredError } from '../ai/routing/ai-router.service';
 import { ClsService } from 'nestjs-cls';
 import { randomUUID } from 'crypto';
 import { PhoneCallStatus, Prisma, VoiceKnowledgeKind } from '@prisma/client';
@@ -252,7 +253,7 @@ describe('VoiceCopilotService (MySQL)', () => {
 
   it('returns a typed unavailable error when provider credentials are missing', async () => {
     aiInfra.createMessage.mockRejectedValueOnce(
-      new Error('ANTHROPIC_API_KEY is not configured'),
+      new AiNotConfiguredError('voice_copilot'),
     );
     const providerError = await service
       .suggest(businessId, userId, liveCallId)

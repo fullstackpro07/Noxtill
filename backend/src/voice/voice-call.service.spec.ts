@@ -1,3 +1,4 @@
+import { AiNotConfiguredError } from '../ai/routing/ai-router.service';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { HttpStatus } from '@nestjs/common';
@@ -1307,7 +1308,7 @@ describe('VoiceCallService (UPD-BE-057/058/059)', () => {
       const callSid = `CA-provider-missing-${randomUUID()}`;
       await service.handleIncoming(callSid, '+14155550120', '+15559990000');
       aiInfra.complete.mockRejectedValueOnce(
-        new Error('ANTHROPIC_API_KEY is not configured'),
+        new AiNotConfiguredError('voice_call'),
       );
       const xml = await service.handleRecording(
         callSid,

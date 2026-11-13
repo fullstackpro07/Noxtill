@@ -1,3 +1,4 @@
+import { AiNotConfiguredError } from '../ai/routing/ai-router.service';
 import { seoAiComplete } from './seo-rules.util';
 
 describe('seoAiComplete', () => {
@@ -18,7 +19,7 @@ describe('seoAiComplete', () => {
     await expect(
       seoAiComplete(
         ai(() =>
-          Promise.reject(new Error('ANTHROPIC_API_KEY is not configured')),
+          Promise.reject(new AiNotConfiguredError('seo_content')),
         ),
         'b1',
         'p',
