@@ -18,9 +18,7 @@ describe('seoAiComplete', () => {
   it('explains a missing provider key instead of failing generically', async () => {
     await expect(
       seoAiComplete(
-        ai(() =>
-          Promise.reject(new AiNotConfiguredError('seo_content')),
-        ),
+        ai(() => Promise.reject(new AiNotConfiguredError('seo_content'))),
         'b1',
         'p',
         0.2,
