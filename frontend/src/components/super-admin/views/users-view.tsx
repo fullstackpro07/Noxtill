@@ -144,7 +144,8 @@ export function UserDetailView({ id }: { id: string }) {
               ["Email", u.email ? <>{u.email} {u.emailVerifiedAt ? <Badge tone="success">Verified</Badge> : <Badge>Unverified</Badge>}</> : "—"],
               ["Phone", u.phone ?? "—"],
               ["Account created", fmtDateTime(u.createdAt)],
-              ["Google sign-in", u.googleLinked ? "Linked" : "No"],
+              ["Sign-in providers", u.signInProviders.length ? u.signInProviders.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ") : "None"],
+              ["Passkeys", u.passkeys ? String(u.passkeys) : "None"],
               ["Profile image", "Not stored by Noxtill"],
             ]}
           />

@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { withDeadlockRetry } from '../common/utils/prisma-transaction-retry.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import {
@@ -384,159 +385,164 @@ export class PublicOrderingService {
     let deliveryId: string | undefined;
     let order: Order;
     try {
-      order = await this.prisma.$transaction(async (tx) => {
-        let customerId: string | undefined;
-        if (dto.customerPhone) {
-          const customer = await tx.customer.upsert({
-            where: {
-              businessId_phone: {
+      order = await withDeadlockRetry(() =>
+        this.prisma.$transaction(async (tx) => {
+          let customerId: string | undefined;
+          if (dto.customerPhone) {
+            const customer = await tx.customer.upsert({
+              where: {
+                businessId_phone: {
+                  businessId: business.id,
+                  phone: dto.customerPhone,
+                },
+              },
+              create: {
                 businessId: business.id,
                 phone: dto.customerPhone,
+                name: dto.customerName ?? dto.customerPhone,
               },
-            },
-            create: {
-              businessId: business.id,
-              phone: dto.customerPhone,
-              name: dto.customerName ?? dto.customerPhone,
-            },
-            update: {},
-          });
-          customerId = customer.id;
-        }
+              update: {},
+            });
+            customerId = customer.id;
+          }
 
-        const productIds = [...new Set(dto.items.map((i) => i.productId))];
-        const products = await tx.product.findMany({
-          where: {
-            id: { in: productIds },
-            businessId: business.id,
-            active: true,
-          },
-        });
-        const productMap = new Map(products.map((p) => [p.id, p]));
-        if (!allowNegativeStock) {
-          for (const [productId, requestedQty] of requestedQuantityByProduct) {
-            const product = productMap.get(productId);
-            if (
-              product?.kind === ProductKind.product &&
-              product.stockQty < requestedQty
-            ) {
+          const productIds = [...new Set(dto.items.map((i) => i.productId))];
+          const products = await tx.product.findMany({
+            where: {
+              id: { in: productIds },
+              businessId: business.id,
+              active: true,
+            },
+          });
+          const productMap = new Map(products.map((p) => [p.id, p]));
+          if (!allowNegativeStock) {
+            for (const [
+              productId,
+              requestedQty,
+            ] of requestedQuantityByProduct) {
+              const product = productMap.get(productId);
+              if (
+                product?.kind === ProductKind.product &&
+                product.stockQty < requestedQty
+              ) {
+                throw new AppException(
+                  ORDER_ERROR_CODES.INSUFFICIENT_STOCK,
+                  `Insufficient stock for "${product.name}" (have ${product.stockQty}, need ${requestedQty})`,
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+            }
+          }
+          const taxRules = await tx.taxRule.findMany({
+            where: { businessId: business.id },
+          });
+
+          const itemsData = dto.items.map((item) => {
+            const product = productMap.get(item.productId);
+            if (!product) {
               throw new AppException(
-                ORDER_ERROR_CODES.INSUFFICIENT_STOCK,
-                `Insufficient stock for "${product.name}" (have ${product.stockQty}, need ${requestedQty})`,
+                ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
+                `Product ${item.productId} not found`,
                 HttpStatus.BAD_REQUEST,
               );
             }
-          }
-        }
-        const taxRules = await tx.taxRule.findMany({
-          where: { businessId: business.id },
-        });
+            return {
+              productId: product.id,
+              name: product.name,
+              price: Number(product.sellingPrice),
+              cost: Number(product.costPrice),
+              qty: item.qty,
+              taxRatePercent: resolveTaxRatePercent(
+                taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
+                product.category,
+                Number(business.taxRate),
+              ),
+            };
+          });
 
-        const itemsData = dto.items.map((item) => {
-          const product = productMap.get(item.productId);
-          if (!product) {
-            throw new AppException(
-              ORDER_ERROR_CODES.PRODUCT_NOT_FOUND,
-              `Product ${item.productId} not found`,
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-          return {
-            productId: product.id,
-            name: product.name,
-            price: Number(product.sellingPrice),
-            cost: Number(product.costPrice),
-            qty: item.qty,
-            taxRatePercent: resolveTaxRatePercent(
-              taxRules.map((r) => ({ ...r, rate: Number(r.rate) })),
-              product.category,
-              Number(business.taxRate),
-            ),
-          };
-        });
+          const taxInclusive = resolvePolicies(business).bool(
+            'sales.pricesIncludeTax',
+          );
+          const { subtotal, tax, total, cogs } = computeOrderTotals(
+            itemsData,
+            0,
+            Number(business.taxRate),
+            taxInclusive,
+          );
 
-        const taxInclusive = resolvePolicies(business).bool(
-          'sales.pricesIncludeTax',
-        );
-        const { subtotal, tax, total, cogs } = computeOrderTotals(
-          itemsData,
-          0,
-          Number(business.taxRate),
-          taxInclusive,
-        );
-
-        const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
+          const [{ next: orderNoRaw }] = await tx.$queryRaw<{ next: bigint }[]>`
         SELECT COALESCE(MAX(order_no), 0) + 1 AS next FROM orders WHERE business_id = ${business.id}
       `;
-        // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
-        // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
-        const orderNo = Number(orderNoRaw);
+          // MySQL migration: MAX()+arithmetic over an Int column comes back as a JS `bigint`
+          // (mysql2/Prisma type it BIGINT), not `number` — Prisma's `Int` column write rejects a bigint.
+          const orderNo = Number(orderNoRaw);
 
-        const order = await tx.order.create({
-          data: {
-            businessId: business.id,
-            orderNo,
-            customerId,
-            orderType: dto.orderType ?? 'online',
-            tableNo: dto.tableNo,
-            status: OrderStatus.pending,
-            subtotal,
-            tax,
-            discount: 0,
-            total,
-            taxInclusive,
-            cogs,
-            publicIdempotencyKeyHash: idempotencyKeyHash,
-            publicIdempotencyRequestHash: requestHash,
-          },
-        });
-
-        await tx.orderItem.createMany({
-          data: itemsData.map((item) => ({
-            orderId: order.id,
-            productId: item.productId,
-            name: item.name,
-            price: item.price,
-            cost: item.cost,
-            qty: item.qty,
-          })),
-        });
-
-        if (isDelivery) {
-          const lat = dto.deliveryLat ?? null;
-          const lng = dto.deliveryLng ?? null;
-          const priced = computeDeliveryPricing({
-            zone,
-            settings: settings ?? {
-              hubLat: null,
-              hubLng: null,
-              costPerKm: null,
-              riderPayPerDelivery: null,
-            },
-            orderTotal: total,
-            lat,
-            lng,
-          });
-          const delivery = await tx.delivery.create({
+          const order = await tx.order.create({
             data: {
               businessId: business.id,
-              orderId: order.id,
-              addressLine: dto.deliveryAddress!.trim(),
-              lat,
-              lng,
-              zoneId: zone?.id,
-              deliveryNote: dto.deliveryNote?.trim() || null,
-              deliveryFee: priced.fee,
-              deliveryCost: priced.cost,
-              distanceKm: priced.distanceKm,
-              trackingToken: randomBytes(16).toString('hex'),
+              orderNo,
+              customerId,
+              orderType: dto.orderType ?? 'online',
+              tableNo: dto.tableNo,
+              status: OrderStatus.pending,
+              subtotal,
+              tax,
+              discount: 0,
+              total,
+              taxInclusive,
+              cogs,
+              publicIdempotencyKeyHash: idempotencyKeyHash,
+              publicIdempotencyRequestHash: requestHash,
             },
           });
-          deliveryId = delivery.id;
-        }
 
-        return order;
-      });
+          await tx.orderItem.createMany({
+            data: itemsData.map((item) => ({
+              orderId: order.id,
+              productId: item.productId,
+              name: item.name,
+              price: item.price,
+              cost: item.cost,
+              qty: item.qty,
+            })),
+          });
+
+          if (isDelivery) {
+            const lat = dto.deliveryLat ?? null;
+            const lng = dto.deliveryLng ?? null;
+            const priced = computeDeliveryPricing({
+              zone,
+              settings: settings ?? {
+                hubLat: null,
+                hubLng: null,
+                costPerKm: null,
+                riderPayPerDelivery: null,
+              },
+              orderTotal: total,
+              lat,
+              lng,
+            });
+            const delivery = await tx.delivery.create({
+              data: {
+                businessId: business.id,
+                orderId: order.id,
+                addressLine: dto.deliveryAddress!.trim(),
+                lat,
+                lng,
+                zoneId: zone?.id,
+                deliveryNote: dto.deliveryNote?.trim() || null,
+                deliveryFee: priced.fee,
+                deliveryCost: priced.cost,
+                distanceKm: priced.distanceKm,
+                trackingToken: randomBytes(16).toString('hex'),
+              },
+            });
+            deliveryId = delivery.id;
+          }
+
+          return order;
+        }),
+      );
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

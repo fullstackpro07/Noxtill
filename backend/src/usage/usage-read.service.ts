@@ -49,7 +49,8 @@ export class UsageReadService {
     @Optional() private readonly s3?: S3Service,
   ) {}
 
-  private async storage(rootId: string) {
+  /** Real bytes stored under the business group's folders, cached briefly. */
+  async storage(rootId: string) {
     const hit = this.storageCache.get(rootId);
     if (hit && Date.now() - hit.at < STORAGE_TTL_MS) return hit.value;
     if (!this.s3) return null;

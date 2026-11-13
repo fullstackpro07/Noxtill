@@ -63,13 +63,18 @@ export function logout(): Promise<void> {
   return apiFetch<void>("/auth/logout", { method: "POST" });
 }
 
-// ---- Auth & Onboarding (email confirmation, password reset, social sign-in) ----
+// ---- Auth & Onboarding (email confirmation code, password reset, social sign-in) ----
 
 export interface VerificationStatus {
   email: string | null;
   verified: boolean;
   resendInSeconds: number;
-  devVerifyUrl?: string;
+  /** Digits in the emailed code. */
+  codeLength: number;
+  /** Minutes an emailed code stays valid. */
+  codeTtlMinutes: number;
+  /** Non-production only: the last code sent, so signup works without an email provider. */
+  devVerifyCode?: string;
 }
 
 export interface ResendResult {
@@ -90,8 +95,9 @@ export function changeUnverifiedEmail(email: string): Promise<ResendResult> {
   return apiFetch<ResendResult>("/auth/verification/email", { method: "PATCH", body: JSON.stringify({ email }) });
 }
 
-export function verifyEmail(token: string): Promise<{ verified: true; email: string | null }> {
-  return apiFetch("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }, { skipAuth: true });
+/** Confirms the signed-in user's email with the 6-digit code from the verification email. */
+export function verifyEmailCode(code: string): Promise<{ verified: true; email: string | null }> {
+  return apiFetch("/auth/verify-email", { method: "POST", body: JSON.stringify({ code }) });
 }
 
 export function forgotPassword(email: string): Promise<{ ok: true }> {
@@ -106,10 +112,83 @@ export function resetPassword(token: string, password: string): Promise<{ reset:
   return apiFetch("/auth/password/reset", { method: "POST", body: JSON.stringify({ token, password }) }, { skipAuth: true });
 }
 
-export function fetchAuthProviders(): Promise<{ google: boolean; apple: boolean }> {
+// ---- Social sign-in & passkeys (auth spec v1.0) ----
+
+export type SocialProvider = "google" | "microsoft" | "facebook";
+
+/** Only methods that are configured and switched on for this environment are true. */
+export interface AuthProviders {
+  google: boolean;
+  microsoft: boolean;
+  facebook: boolean;
+  passkeys: boolean;
+}
+
+export function fetchAuthProviders(): Promise<AuthProviders> {
   return apiFetch("/auth/providers", {}, { skipAuth: true });
 }
 
-export function fetchGoogleAuthUrl(): Promise<{ url: string }> {
-  return apiFetch("/auth/google", {}, { skipAuth: true });
+export function fetchProviderStartUrl(provider: SocialProvider): Promise<{ url: string }> {
+  return apiFetch(`/auth/${provider}/start`, {}, { skipAuth: true });
+}
+
+/** The callback redirect carries a one-time handoff code, never tokens. */
+export type OAuthExchangeResult = AuthTokens | Pending2fa | { needsEmail: true; ticket: string; provider: SocialProvider; name: string | null };
+
+export function exchangeOAuthCode(code: string): Promise<OAuthExchangeResult> {
+  return apiFetch("/auth/oauth/exchange", { method: "POST", body: JSON.stringify({ code }) }, { skipAuth: true });
+}
+
+export function completeOAuthSignup(ticket: string, email: string): Promise<AuthTokens | Pending2fa> {
+  return apiFetch("/auth/oauth/complete", { method: "POST", body: JSON.stringify({ ticket, email }) }, { skipAuth: true });
+}
+
+export interface ConnectedProvider {
+  provider: SocialProvider;
+  label: string;
+  enabled: boolean;
+  connected: boolean;
+  email: string | null;
+  connectedAt: string | null;
+  lastUsedAt: string | null;
+}
+
+export interface IdentitiesResponse {
+  providers: ConnectedProvider[];
+  passkeys: number;
+  passkeysEnabled: boolean;
+  emailVerified: boolean;
+}
+
+export function fetchIdentities(): Promise<IdentitiesResponse> {
+  return apiFetch("/auth/identities");
+}
+
+/** `password` is only needed when the current sign-in is older than 15 minutes (REAUTH_REQUIRED). */
+export function startIdentityLink(provider: SocialProvider, password?: string): Promise<{ url: string }> {
+  return apiFetch(`/auth/identities/${provider}/link`, { method: "POST", body: JSON.stringify(password ? { password } : {}) });
+}
+
+export function unlinkIdentity(provider: SocialProvider, password?: string): Promise<{ disconnected: true }> {
+  return apiFetch(`/auth/identities/${provider}`, { method: "DELETE", body: JSON.stringify(password ? { password } : {}) });
+}
+
+export interface PasskeyView {
+  id: string;
+  label: string;
+  synced: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export function fetchPasskeys(): Promise<PasskeyView[]> {
+  return apiFetch("/auth/passkeys");
+}
+
+export function renamePasskey(id: string, label: string): Promise<{ id: string; label: string }> {
+  return apiFetch(`/auth/passkeys/${id}`, { method: "PATCH", body: JSON.stringify({ label }) });
+}
+
+export function removePasskey(id: string, password?: string): Promise<{ removed: true }> {
+  return apiFetch(`/auth/passkeys/${id}`, { method: "DELETE", body: JSON.stringify(password ? { password } : {}) });
 }

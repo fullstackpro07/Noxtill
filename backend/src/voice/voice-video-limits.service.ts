@@ -86,6 +86,18 @@ export class VoiceVideoLimitsService {
     );
   }
 
+  /** The business's chosen retention, capped to the plan's maximum for meeting recordings. */
+  async meetingRetentionDays(
+    businessId: string,
+    policyDays: number,
+  ): Promise<number> {
+    const plan = await this.meters.planLimit(
+      businessId,
+      METRICS.MEETING_RECORDING_DAYS,
+    );
+    return plan.limit == null ? policyDays : Math.min(policyDays, plan.limit);
+  }
+
   /** Recorded minutes from the provider-measured duration; once per recording. */
   async recordRecording(
     businessId: string,

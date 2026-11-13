@@ -1,4 +1,11 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Optional,
+} from '@nestjs/common';
+import { MetersService } from '../usage/meters.service';
+import { METRICS } from '../usage/usage.constants';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -24,6 +31,21 @@ export class ApiKeyRateLimitedException extends HttpException {
   }
 }
 
+/** 429 when the business has used its plan's monthly API requests (pricing page I15). */
+export class ApiMonthlyLimitException extends HttpException {
+  constructor(limit: number, resetsAt: Date) {
+    super(
+      {
+        code: 'ALLOWANCE_EXHAUSTED',
+        message: `This workspace has used all ${limit.toLocaleString('en-US')} API requests included for this period. The allowance resets on ${resetsAt.toISOString().slice(0, 10)}.`,
+      },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+}
+
+const MONTHLY_CACHE_MS = 30_000;
+
 /**
  * Real API-key authentication (UPD-BE-081) — the read side `JwtAuthGuard` calls for any
  * `Authorization: Bearer ntk_...` request, resolving straight to the same `AuthenticatedUser`
@@ -38,7 +60,53 @@ export class ApiKeyRateLimitedException extends HttpException {
  */
 @Injectable()
 export class ApiKeyAuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  /** Per business: the plan limit and the period's count, refreshed every 30 s and bumped locally. */
+  private readonly monthly = new Map<
+    string,
+    {
+      at: number;
+      limit: number | null;
+      windowStart: Date;
+      windowEnd: Date;
+      used: number;
+    }
+  >();
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly meters?: MetersService,
+  ) {}
+
+  /** Monthly plan allowance across all of the business's keys (counted in ApiKeyUsageHour). */
+  private async assertMonthly(businessId: string): Promise<void> {
+    if (!this.meters) return;
+    let state = this.monthly.get(businessId);
+    if (!state || Date.now() - state.at > MONTHLY_CACHE_MS) {
+      const plan = await this.meters.planLimit(
+        businessId,
+        METRICS.API_REQUESTS,
+      );
+      const agg =
+        plan.limit == null
+          ? null
+          : await this.prisma.apiKeyUsageHour.aggregate({
+              where: { businessId, bucketStart: { gte: plan.windowStart } },
+              _sum: { count: true },
+            });
+      state = {
+        at: Date.now(),
+        limit: plan.limit,
+        windowStart: plan.windowStart,
+        windowEnd: plan.windowEnd,
+        used: agg?._sum.count ?? 0,
+      };
+      this.monthly.set(businessId, state);
+    } else {
+      state.used += 1;
+    }
+    if (state.limit != null && state.used > state.limit)
+      throw new ApiMonthlyLimitException(state.limit, state.windowEnd);
+  }
 
   async authenticate(rawKey: string): Promise<AuthenticatedUser | null> {
     const keyHash = createHash('sha256').update(rawKey).digest('hex');
@@ -54,6 +122,7 @@ export class ApiKeyAuthService {
       );
       throw new ApiKeyRateLimitedException(retryAfter);
     }
+    await this.assertMonthly(row.businessId);
 
     void this.prisma.apiKey
       .update({ where: { id: row.id }, data: { lastUsedAt: new Date() } })

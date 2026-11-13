@@ -88,7 +88,7 @@ describe('Auth & Onboarding integration', () => {
     capabilities: [],
   });
 
-  it('email-only signup creates an unverified owner, a placeholder business and a confirmation link', async () => {
+  it('email-only signup creates an unverified owner, a placeholder business and a verification code', async () => {
     const res = await auth.signup({ email, password: 'Salon2026!' });
     userId = res.user.id;
     businessId = res.business.id;
@@ -119,12 +119,69 @@ describe('Auth & Onboarding integration', () => {
     );
   });
 
-  it('confirms the email with a single-use link', async () => {
-    const raw = await tokens.create(userId, 'verify_email', email);
-    await expect(account.verifyEmail(raw)).resolves.toMatchObject({
+  it('burns a verification code after 5 wrong guesses', async () => {
+    const code = await tokens.createEmailOtp(userId, email);
+    expect(code).toMatch(/^\d{6}$/);
+    const wrong = code === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 4; i++) {
+      expect(await codeOf(account.verifyEmail(userId, wrong))).toBe(
+        'AUTH_CODE_INVALID',
+      );
+    }
+    expect(await codeOf(account.verifyEmail(userId, wrong))).toBe(
+      'AUTH_CODE_LOCKED',
+    );
+    // The right code no longer works once the code is burned.
+    expect(await codeOf(account.verifyEmail(userId, code))).toBe(
+      'AUTH_CODE_INVALID',
+    );
+    const status = await account.verificationStatus(userId);
+    expect(status.verified).toBe(false);
+  });
+
+  it('a new code invalidates the previous one', async () => {
+    const first = await tokens.createEmailOtp(userId, email);
+    const second = await tokens.createEmailOtp(userId, email);
+    if (first !== second) {
+      expect(await codeOf(account.verifyEmail(userId, first))).toBe(
+        'AUTH_CODE_INVALID',
+      );
+    }
+    expect(
+      await prisma.authToken.count({
+        where: { userId, purpose: 'verify_email', usedAt: null },
+      }),
+    ).toBe(1);
+  });
+
+  it('rejects a code that has expired', async () => {
+    const code = await tokens.createEmailOtp(userId, email);
+    await prisma.authToken.updateMany({
+      where: { userId, purpose: 'verify_email', usedAt: null },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    expect(await codeOf(account.verifyEmail(userId, code))).toBe(
+      'AUTH_CODE_INVALID',
+    );
+  });
+
+  it('confirms the email with the emailed 6-digit code', async () => {
+    const code = await tokens.createEmailOtp(userId, email);
+    await expect(account.verifyEmail(userId, code)).resolves.toMatchObject({
+      verified: true,
+      email,
+    });
+    const row = await prisma.authToken.findFirstOrThrow({
+      where: { userId, purpose: 'verify_email' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(row.usedAt).not.toBeNull();
+    // The DB never stores the raw code.
+    expect(row.tokenHash).not.toContain(code);
+    // Already verified: a repeat call is a no-op success, not an error.
+    await expect(account.verifyEmail(userId, code)).resolves.toMatchObject({
       verified: true,
     });
-    await expect(account.verifyEmail(raw)).rejects.toBeInstanceOf(AppException);
     const status = await account.verificationStatus(userId);
     expect(status.verified).toBe(true);
   });

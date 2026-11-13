@@ -26,7 +26,7 @@ export interface TokenPair {
   refreshToken: string;
 }
 
-interface RequestMeta {
+export interface RequestMeta {
   userAgent?: string;
   ipAddress?: string;
 }
@@ -42,6 +42,10 @@ export interface PublicUser {
 export interface LoginSuccess extends TokenPair {
   user: PublicUser;
 }
+
+/** How the user proved who they are before `completeLogin` (recorded on the security event). */
+export type LoginMethod =
+  'password' | 'google' | 'microsoft' | 'facebook' | 'passkey';
 
 /** 2FA is enabled — a real code was just sent, exchange it via `verifyTwoFactorLogin`. */
 export interface Pending2fa {
@@ -76,7 +80,7 @@ export class AuthService {
    * Auth & Onboarding: the redesigned signup asks only for a work email + password. The business
    * name, owner name, country and the rest are collected in onboarding Step 2, so until then the
    * business carries a neutral placeholder name and `onboardingCompletedAt` stays null. An email
-   * signup starts unverified and is sent a real confirmation link.
+   * signup starts unverified and is emailed a 6-digit verification code.
    */
   async signup(dto: SignupDto, meta: RequestMeta = {}) {
     const identityFilters: Prisma.UserWhereInput[] = [];
@@ -215,6 +219,48 @@ export class AuthService {
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
 
+    return this.completeLogin(user.id, meta, {
+      method: 'password',
+      identifier: dto.emailOrPhone,
+      rememberMe: dto.rememberMe,
+    });
+  }
+
+  /**
+   * The single gate every sign-in method finishes through (password, Google, Microsoft, Facebook,
+   * passkey) once the identity itself is proven. Enforces lockout, platform/business suspension and
+   * staff deactivation, records the security event, and applies WhatsApp 2FA — so no provider or
+   * passkey can bypass a rule password login obeys (auth spec §8.3).
+   */
+  async completeLogin(
+    userId: string,
+    meta: RequestMeta,
+    opts: { method: LoginMethod; identifier?: string; rememberMe?: boolean },
+  ): Promise<LoginSuccess | Pending2fa> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+    const evt = {
+      identifier: opts.identifier ?? user.email ?? user.phone ?? null,
+      ipAddress: meta.ipAddress ?? null,
+      userAgent: meta.userAgent ?? null,
+    };
+
+    // Password login checks this before comparing the password; every other method checks it here.
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      await this.securityEvents?.record({
+        ...evt,
+        type: 'login_failed',
+        userId: user.id,
+        metadata: { reason: 'account_locked', method: opts.method },
+      });
+      throw new AppException(
+        'ACCOUNT_LOCKED',
+        `Too many failed attempts — try again after ${user.lockedUntil.toISOString()}`,
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     let businessUser: Awaited<
       ReturnType<AuthService['resolveActiveBusinessUser']>
     >;
@@ -233,6 +279,7 @@ export class AuthService {
           userId: user.id,
           metadata: {
             code: (error.getResponse() as { code?: string }).code,
+            method: opts.method,
           },
         });
       }
@@ -250,7 +297,10 @@ export class AuthService {
         type: newDevice ? 'login_new_device' : 'login_success',
         userId: user.id,
         businessId: businessUser.businessId,
-        metadata: { twoFactorPending: user.twoFactorEnabled },
+        metadata: {
+          twoFactorPending: user.twoFactorEnabled,
+          method: opts.method,
+        },
       });
     }
 
@@ -277,21 +327,9 @@ export class AuthService {
       businessUser.role,
       businessUser.customRoleId,
       meta,
-      dto.rememberMe === false ? '1d' : undefined,
+      opts.rememberMe === false ? '1d' : undefined,
     );
     return { user: this.toPublicUser(user), ...tokens };
-  }
-
-  /** Issues a real session for an already-authenticated identity (Google sign-in, etc.). */
-  async issueSessionFor(userId: string, meta: RequestMeta = {}) {
-    const businessUser = await this.resolveActiveBusinessUser(userId);
-    return this.issueTokens(
-      userId,
-      businessUser.businessId,
-      businessUser.role,
-      businessUser.customRoleId,
-      meta,
-    );
   }
 
   /** Completes a 2FA-gated login — exchanges a real, verified code + pending token for real tokens. */

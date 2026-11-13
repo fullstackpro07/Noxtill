@@ -11,7 +11,7 @@ import {
   VOICE_PRESENCE_TTL_SECONDS,
 } from './voice.constants';
 import { TOPICS, type TopicKey } from './voice-analysis';
-import { voiceSoftphoneIdentity } from './voice-softphone.util';
+import { agentDialTarget } from './voice-softphone.util';
 
 export interface ReservedHumanAgent {
   assignmentId: string;
@@ -326,9 +326,12 @@ export class VoiceHumanAgentDispatchService {
               profileId: profile.id,
               staffUserId: profile.staffUserId,
               name: profile.staffUser.user.name,
-              phone:
-                profile.staffUser.user.phone ??
-                `client:${voiceSoftphoneIdentity(businessId, profile.id)}`,
+              phone: agentDialTarget(
+                profile.staffUser.user.phone,
+                businessId,
+                profile.id,
+                softphoneEnabled,
+              ),
               attemptNumber,
             };
           }

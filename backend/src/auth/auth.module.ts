@@ -11,10 +11,14 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { AuthMailerService } from './auth-mailer.service';
 import { AuthTokensService } from './auth-tokens.service';
 import { AccountService } from './account.service';
+import { SignInMethodsService } from './sign-in-methods.service';
+import { SocialAuthService } from './oauth/social-auth.service';
+import { PasskeysService } from './passkeys/passkeys.service';
+import { PasskeysController } from './passkeys/passkeys.controller';
 
 @Module({
   imports: [PassportModule, JwtModule.register({}), MessagingModule],
-  controllers: [AuthController, SessionsController],
+  controllers: [AuthController, SessionsController, PasskeysController],
   providers: [
     AuthService,
     SessionsService,
@@ -23,6 +27,9 @@ import { AccountService } from './account.service';
     AuthMailerService,
     AuthTokensService,
     AccountService,
+    SignInMethodsService,
+    SocialAuthService,
+    PasskeysService,
   ],
   exports: [AuthService, SessionsService, AuthTokensService],
 })

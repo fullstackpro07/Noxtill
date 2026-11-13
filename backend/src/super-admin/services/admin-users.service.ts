@@ -150,7 +150,8 @@ export class AdminUsersService {
         updatedAt: true,
         emailVerifiedAt: true,
         twoFactorEnabled: true,
-        googleId: true,
+        authIdentities: { select: { provider: true } },
+        _count: { select: { passkeyCredentials: true } },
         platformStatus: true,
         platformStatusReason: true,
         platformStatusAt: true,
@@ -216,9 +217,15 @@ export class AdminUsersService {
         },
       }),
     ]);
-    const { googleId, ...rest } = user;
+    const { authIdentities, _count, ...rest } = user;
+    const signInProviders = authIdentities.map((i) => i.provider);
     return {
-      user: { ...rest, googleLinked: !!googleId },
+      user: {
+        ...rest,
+        googleLinked: signInProviders.includes('google'),
+        signInProviders,
+        passkeys: _count.passkeyCredentials,
+      },
       sessions,
       security,
       activity,

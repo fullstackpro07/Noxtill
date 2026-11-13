@@ -14,6 +14,13 @@ import {
   relativeTime,
 } from '../hub.core';
 import { HubDeps } from './hub.deps';
+import { ConfigService } from '@nestjs/config';
+import {
+  passkeysEnabled,
+  PROVIDER_LABEL,
+  providerEnabled,
+  SOCIAL_PROVIDERS,
+} from '../../auth/oauth/oauth-providers';
 
 const bad = (message: string) =>
   new AppException('SETTING_INVALID', message, HttpStatus.BAD_REQUEST);
@@ -549,7 +556,7 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
       help: [
         'Only security signals Noxtill genuinely records are shown — there is no invented risk score.',
         'Sensitive setting changes and exports are written to the audit log by design.',
-        'Password reset and per-user unlock are not available in this version.',
+        'Self-service password reset is available from the sign-in page. Per-user unlock by an admin is not available in this version.',
       ],
       actions: [{ label: 'View history', icon: 'history', kind: 'history' }],
       groups: [
@@ -639,6 +646,60 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
               }),
             }),
             row({
+              key: 'sign-in-providers',
+              label: 'Sign-in methods offered',
+              description:
+                'Ways to sign in that are configured and switched on for this Noxtill environment, besides email and password.',
+              risk: 'Medium',
+              state: () => {
+                const env = new ConfigService();
+                const on = [
+                  ...SOCIAL_PROVIDERS.filter((p) =>
+                    providerEnabled(env, p),
+                  ).map((p) => PROVIDER_LABEL[p]),
+                  ...(passkeysEnabled(env) ? ['Passkeys'] : []),
+                ];
+                return {
+                  value: on.length
+                    ? `Email & password · ${on.join(' · ')}`
+                    : 'Email & password only',
+                };
+              },
+            }),
+            row({
+              key: 'sign-in-methods-mine',
+              label: 'Your connected sign-in methods',
+              description:
+                'Providers and passkeys linked to your own account, in addition to your password.',
+              scope: 'User',
+              link: {
+                label: 'Manage sign-in methods',
+                href: '/settings/tools/security',
+              },
+              state: async (ctx) => {
+                const [identities, passkeys] = await Promise.all([
+                  d.prisma.authIdentity.findMany({
+                    where: { userId: ctx.userId },
+                    select: { provider: true },
+                  }),
+                  d.prisma.passkeyCredential.count({
+                    where: { userId: ctx.userId },
+                  }),
+                ]);
+                const parts = identities.map(
+                  (i) =>
+                    PROVIDER_LABEL[i.provider as keyof typeof PROVIDER_LABEL] ??
+                    i.provider,
+                );
+                if (passkeys) {
+                  parts.push(`${passkeys} passkey${passkeys === 1 ? '' : 's'}`);
+                }
+                return {
+                  value: parts.length ? parts.join(' · ') : 'Password only',
+                };
+              },
+            }),
+            row({
               key: 'two-factor-mine',
               label: 'Your two-factor status',
               description: 'Whether two-factor is on for your own account.',
@@ -662,7 +723,7 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
         },
         {
           title: 'Security events',
-          hint: 'Recorded in the audit log, last 30 days',
+          hint: 'Recorded in the audit and security logs, last 30 days',
           dynamicRows: async (ctx) => {
             const since = new Date(ctx.now.getTime() - 30 * 86_400_000);
             const count = (where: object) =>
@@ -673,14 +734,50 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
                   ...where,
                 },
               });
-            const [perms, exports, custExport, erase, changes] =
-              await Promise.all([
-                count({ action: { startsWith: 'role_capability.' } }),
-                count({ action: 'data_export.requested' }),
-                count({ action: 'customer.export' }),
-                count({ action: 'customer.erase' }),
-                count({ entity: 'setting' }),
-              ]);
+            // Sign-in events are written per person (often before a business is resolved), so they
+            // are counted for this business's members rather than by business id.
+            const memberIds = (
+              await d.prisma.businessUser.findMany({
+                where: { businessId: ctx.businessId },
+                select: { userId: true },
+              })
+            ).map((m) => m.userId);
+            const signIn = (types: string[]) =>
+              d.prisma.securityEvent.count({
+                where: {
+                  userId: { in: memberIds },
+                  type: { in: types },
+                  createdAt: { gte: since },
+                },
+              });
+            const [
+              perms,
+              exports,
+              custExport,
+              erase,
+              changes,
+              failedSignIns,
+              newDevices,
+              methodChanges,
+            ] = await Promise.all([
+              count({ action: { startsWith: 'role_capability.' } }),
+              count({ action: 'data_export.requested' }),
+              count({ action: 'customer.export' }),
+              count({ action: 'customer.erase' }),
+              count({ entity: 'setting' }),
+              signIn([
+                'login_failed',
+                'login_provider_failed',
+                'two_factor_failed',
+              ]),
+              signIn(['login_new_device']),
+              signIn([
+                'identity_linked',
+                'identity_unlinked',
+                'passkey_added',
+                'passkey_removed',
+              ]),
+            ]);
             const mk = (
               key: string,
               label: string,
@@ -728,10 +825,28 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
                 'Changes made from this Settings screen.',
                 changes,
               ),
+              mk(
+                'ev-failed-sign-ins',
+                'Failed sign-ins',
+                'Wrong passwords, rejected provider or passkey sign-ins and failed two-factor codes by your team.',
+                failedSignIns,
+              ),
+              mk(
+                'ev-new-devices',
+                'New-device sign-ins',
+                'Sign-ins by your team from a device or address not seen before.',
+                newDevices,
+              ),
+              mk(
+                'ev-sign-in-methods',
+                'Sign-in method changes',
+                'Providers connected or disconnected and passkeys added or removed by your team.',
+                methodChanges,
+              ),
             ];
           },
           footer:
-            'Failed sign-ins and new-device sign-ins are not written as events, so they are not listed.',
+            'Sign-in attempts for an email that has no account are not tied to a business, so they are not listed here.',
         },
       ],
     },

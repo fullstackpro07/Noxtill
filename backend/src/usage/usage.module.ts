@@ -7,6 +7,7 @@ import { SubscriptionController } from './subscription.controller';
 import { SubscriptionService } from './subscription.service';
 import { PurchasesService } from './purchases.service';
 import { NumberPricingService } from './number-pricing.service';
+import { StorageQuotaService } from './storage-quota.service';
 import { PaymentMethodsService } from './payment-methods.service';
 import { UsageReadService } from './usage-read.service';
 import { UsageStripeHelper } from './usage-stripe.helper';
@@ -33,6 +34,7 @@ import { USAGE_QUEUE } from './usage.constants';
     SubscriptionService,
     PurchasesService,
     NumberPricingService,
+    StorageQuotaService,
     PaymentMethodsService,
     UsageReadService,
     UsageStripeEventsService,

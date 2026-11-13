@@ -8,6 +8,7 @@ import {
   PLAN_SEEDS,
   PRICE_SEEDS,
   VIDEO_PLAN_LIMITS,
+  PLAN_LIMITS,
   INTELLIGENCE_RUN_LIMITS,
   ZERO_INCLUDED_CAPACITY,
 } from './usage.constants';
@@ -153,24 +154,28 @@ export class UsageSeedService implements OnModuleInit {
           resetRule: 'none',
         })),
         // Allowances the product owner hasn't set per plan yet (spec §21 #5): not_configured.
-        ...[
-          'automation_runs',
-          'storage_bytes',
-          'digitizer_pages',
-          'seo_keywords',
-          'esign_transactions',
-          'websites',
-        ].map((metricCode) => ({
-          planId: plan.id,
-          metricCode,
-          kind: metricCode === 'websites' ? 'capacity' : 'allowance',
-          includedQuantity: null,
-          resetRule: ['storage_bytes', 'seo_keywords', 'websites'].includes(
+        ...Object.entries(PLAN_LIMITS)
+          .filter(([, l]) => p.key in l.byPlan)
+          .map(([metricCode, l]) => ({
+            planId: plan.id,
             metricCode,
-          )
-            ? 'none'
-            : 'period',
-        })),
+            kind: l.kind,
+            includedQuantity: l.byPlan[p.key],
+            resetRule: l.resetRule,
+          })),
+        ...['automation_runs', 'seo_keywords', 'esign_transactions', 'websites']
+          .filter((m) => !(m in PLAN_LIMITS))
+          .map((metricCode) => ({
+            planId: plan.id,
+            metricCode,
+            kind: metricCode === 'websites' ? 'capacity' : 'allowance',
+            includedQuantity: null,
+            resetRule: ['storage_bytes', 'seo_keywords', 'websites'].includes(
+              metricCode,
+            )
+              ? 'none'
+              : 'period',
+          })),
       ];
       await this.prisma.planEntitlement.createMany({
         data: rows,
