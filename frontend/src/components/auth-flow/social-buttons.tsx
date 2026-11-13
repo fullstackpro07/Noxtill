@@ -2,43 +2,54 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAuthProviders, fetchGoogleAuthUrl } from "@/lib/auth-api";
+import { fetchAuthProviders, fetchProviderStartUrl, type SocialProvider } from "@/lib/auth-api";
 import { toast } from "@/lib/toast";
-import { AppleIcon, GoogleIcon, SocialButton } from "./auth-ui";
+import { FacebookIcon, GoogleIcon, MicrosoftIcon, OrDivider, SocialButton } from "./auth-ui";
 
-/** Google is a real OAuth sign-in when the server has credentials; Apple has none configured and says so. */
-export function SocialButtons() {
-  const { data: providers } = useQuery({ queryKey: ["auth", "providers"], queryFn: fetchAuthProviders, staleTime: 5 * 60_000, retry: false });
-  const [redirecting, setRedirecting] = useState(false);
+const PROVIDERS: { id: SocialProvider; label: string; Icon: () => React.JSX.Element }[] = [
+  { id: "google", label: "Google", Icon: GoogleIcon },
+  { id: "microsoft", label: "Microsoft", Icon: MicrosoftIcon },
+  { id: "facebook", label: "Facebook", Icon: FacebookIcon },
+];
 
-  async function google() {
-    if (!providers?.google) {
-      toast.info("Google sign-in isn't configured on this server yet — use your email instead.");
-      return;
-    }
-    setRedirecting(true);
+export function useAuthProviders() {
+  return useQuery({ queryKey: ["auth", "providers"], queryFn: fetchAuthProviders, staleTime: 5 * 60_000, retry: false });
+}
+
+/**
+ * Only providers the server reports as configured and switched on are shown — no placeholder
+ * buttons that can't complete sign-in (auth spec §3.4). Renders nothing (not even the divider)
+ * when no provider is available.
+ */
+export function SocialButtons({ dividerLabel = "or continue with email" }: { dividerLabel?: string }) {
+  const { data: providers } = useAuthProviders();
+  const [redirecting, setRedirecting] = useState<SocialProvider | null>(null);
+  const shown = PROVIDERS.filter((p) => providers?.[p.id]);
+  if (!shown.length) return null;
+
+  async function start(provider: SocialProvider, label: string) {
+    if (redirecting) return;
+    setRedirecting(provider);
     try {
-      const { url } = await fetchGoogleAuthUrl();
+      const { url } = await fetchProviderStartUrl(provider);
       window.location.assign(url);
     } catch {
-      setRedirecting(false);
-      toast.error("Couldn't start Google sign-in — please try again.");
+      setRedirecting(null);
+      toast.error(`Couldn't start ${label} sign-in — please try again.`);
     }
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <SocialButton onClick={google} disabled={redirecting} title={providers && !providers.google ? "Google sign-in is not configured" : undefined}>
-        <GoogleIcon />
-        {redirecting ? "Redirecting to Google…" : "Continue with Google"}
-      </SocialButton>
-      <SocialButton
-        onClick={() => toast.info("Sign in with Apple isn't available yet — use Google or your email.")}
-        title="Sign in with Apple is not available yet"
-      >
-        <AppleIcon />
-        Continue with Apple
-      </SocialButton>
-    </div>
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {shown.map(({ id, label, Icon }) => (
+          <SocialButton key={id} onClick={() => start(id, label)} disabled={redirecting !== null}>
+            <Icon />
+            {redirecting === id ? `Redirecting to ${label}…` : `Continue with ${label}`}
+          </SocialButton>
+        ))}
+      </div>
+      <OrDivider label={dividerLabel} />
+    </>
   );
 }

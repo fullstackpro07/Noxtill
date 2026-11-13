@@ -12,7 +12,6 @@ import {
   FieldLabel,
   FormError,
   LogoN,
-  OrDivider,
   PasswordField,
   PrimaryButton,
   StrengthMeter,
@@ -59,7 +58,6 @@ export default function SignupPage() {
       <Title>Get started for free</Title>
       <Subtitle>Create your account</Subtitle>
       <SocialButtons />
-      <OrDivider label="or continue with email" />
       <form onSubmit={onSubmit} noValidate>
         <FieldLabel htmlFor="email">Work email</FieldLabel>
         <TextField

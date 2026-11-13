@@ -15,19 +15,25 @@ import {
   LogoN,
   OrDivider,
   PasswordField,
+  PasskeyIcon,
   PrimaryButton,
+  SocialButton,
   Subtitle,
   TextField,
   Title,
 } from "@/components/auth-flow/auth-ui";
-import { SocialButtons } from "@/components/auth-flow/social-buttons";
+import { SocialButtons, useAuthProviders } from "@/components/auth-flow/social-buttons";
+import { isPasskeyCancel, passkeysSupported, signInWithPasskey } from "@/lib/passkeys";
 import { establishSession } from "@/components/auth-flow/session";
 
-const GOOGLE_ERRORS: Record<string, string> = {
-  google_cancelled: "Google sign-in was cancelled.",
-  google_state: "Your Google sign-in expired — please try again.",
-  google_exchange: "Google sign-in couldn't be completed — please try again.",
-  google_email: "Your Google account has no verified email address.",
+/** Safe messages for `/login?error=` codes from the provider callback (never reveal whether an email has an account). */
+const SIGN_IN_ERRORS: Record<string, string> = {
+  provider_cancelled: "Sign-in was cancelled.",
+  provider_state: "Your sign-in expired — please try again.",
+  provider_exchange: "Sign-in couldn't be completed — please try again.",
+  provider_unavailable: "That sign-in method isn't available right now — use your email instead.",
+  account_exists: "We couldn't sign you in with that account. If you already have a Noxtill account, log in below, then connect it from Settings → Security.",
+  sign_in_expired: "Your sign-in expired — please try again.",
 };
 
 type SearchParams = Promise<{ tab?: string | string[]; next?: string | string[]; error?: string | string[]; reset?: string | string[] }>;
@@ -42,8 +48,10 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const googleError = first(params.error);
-  const [error, setError] = useState<string | null>(googleError ? (GOOGLE_ERRORS[googleError] ?? "Sign-in failed — please try again.") : null);
+  const providerError = first(params.error);
+  const [error, setError] = useState<string | null>(providerError ? (SIGN_IN_ERRORS[providerError] ?? "Sign-in failed — please try again.") : null);
+  const { data: providers } = useAuthProviders();
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
   // A 2FA-enabled account gets a code step before tokens are issued (UPD-INT-016).
   const [tempToken, setTempToken] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -73,6 +81,26 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
     } catch (err) {
       setSubmitting(false);
       setError(err instanceof ApiError ? (err.status === 401 ? "That email and password don't match an account." : err.message) : "Something went wrong — please try again.");
+    }
+  }
+
+  async function onPasskey() {
+    if (passkeyBusy) return;
+    setError(null);
+    setPasskeyBusy(true);
+    try {
+      const result = await signInWithPasskey();
+      if ("pending2fa" in result) {
+        // A passkey proves identity; an account with WhatsApp 2FA still needs its code.
+        setTempToken(result.tempToken);
+        setPasskeyBusy(false);
+        return;
+      }
+      router.push(await establishSession(result, next));
+    } catch (err) {
+      setPasskeyBusy(false);
+      if (isPasskeyCancel(err)) return;
+      setError(err instanceof ApiError ? err.message : "We couldn't sign you in with a passkey — try again or use your email.");
     }
   }
 
@@ -133,7 +161,6 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
         ) : (
           <>
             <SocialButtons />
-            <OrDivider label="or continue with email" />
             <form key="credentials" onSubmit={onSubmit} noValidate>
               <FieldLabel htmlFor="email">Email</FieldLabel>
               <TextField
@@ -186,6 +213,15 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
                 <ArrowRight />
               </PrimaryButton>
             </form>
+            {providers?.passkeys && passkeysSupported() && (
+              <>
+                <OrDivider label="or" margin="18px 0" />
+                <SocialButton onClick={onPasskey} disabled={passkeyBusy || submitting}>
+                  <PasskeyIcon />
+                  {passkeyBusy ? "Waiting for your passkey…" : "Continue with a passkey"}
+                </SocialButton>
+              </>
+            )}
             <p style={{ textAlign: "center", fontSize: 15, color: C.secondary, margin: "20px 0 0" }}>
               Don&apos;t have an account?{" "}
               <Link href="/signup" style={{ fontWeight: 700 }}>

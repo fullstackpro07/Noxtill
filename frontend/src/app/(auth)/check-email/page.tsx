@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
-import { changeUnverifiedEmail, fetchVerificationStatus, logout, resendVerification } from "@/lib/auth-api";
+import { changeUnverifiedEmail, fetchVerificationStatus, logout, resendVerification, verifyEmailCode } from "@/lib/auth-api";
 import { useAuthStore } from "@/store/auth-store";
-import { AuthCard, BackToLogin, C, InfoNote, OrDivider, PrimaryButton } from "@/components/auth-flow/auth-ui";
+import { ArrowRight, AuthCard, BackToLogin, C, InfoNote, OrDivider, PrimaryButton } from "@/components/auth-flow/auth-ui";
+import { OtpInput } from "@/components/auth-flow/otp-input";
 import { refreshSession } from "@/components/auth-flow/session";
 
 /** Opens the user's webmail when the domain is a known provider; otherwise the default mail app. */
@@ -31,6 +32,9 @@ export default function CheckEmailPage() {
   const [draftEmail, setDraftEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "neutral" | "success" | "danger"; text: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (hasHydrated && !accessToken) router.replace("/login?next=/check-email");
@@ -59,6 +63,24 @@ export default function CheckEmailPage() {
   }, [countdown, now]);
 
   const email = status?.email ?? "";
+  const codeLength = status?.codeLength ?? 6;
+
+  const submitCode = useCallback(
+    async (value: string) => {
+      if (verifying || value.length !== codeLength) return;
+      setVerifying(true);
+      setCodeError(null);
+      try {
+        await verifyEmailCode(value);
+        router.replace(await refreshSession("/onboarding"));
+      } catch (err) {
+        setCodeError(err instanceof ApiError ? err.message : "We couldn't check that code — please try again.");
+        setCode("");
+        setVerifying(false);
+      }
+    },
+    [verifying, codeLength, router],
+  );
 
   const resend = useCallback(async () => {
     if (countdown > 0 || busy) return;
@@ -67,7 +89,9 @@ export default function CheckEmailPage() {
       const r = await resendVerification();
       setNow(Date.now());
       setDeadline(Date.now() + r.resendInSeconds * 1000);
-      setNotice(r.sent ? { tone: "success", text: `A new confirmation link is on its way to ${r.email}.` } : { tone: "danger", text: "We couldn't send the email just now. Please try again in a minute." });
+      setCode("");
+      setCodeError(null);
+      setNotice(r.sent ? { tone: "success", text: `A new code is on its way to ${r.email}.` } : { tone: "danger", text: "We couldn't send the email just now. Please try again in a minute." });
     } catch (err) {
       setNotice({ tone: "danger", text: err instanceof ApiError ? err.message : "Couldn't resend — please try again." });
       refetch();
@@ -83,7 +107,9 @@ export default function CheckEmailPage() {
       setEditing(false);
       setNow(Date.now());
       setDeadline(Date.now() + r.resendInSeconds * 1000);
-      setNotice({ tone: "success", text: `Updated — we sent a new link to ${r.email}.` });
+      setCode("");
+      setCodeError(null);
+      setNotice({ tone: "success", text: `Updated — we sent a new code to ${r.email}.` });
       await refetch();
       await refreshSession();
     } catch (err) {
@@ -123,7 +149,7 @@ export default function CheckEmailPage() {
       </div>
       <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-.02em", textAlign: "center", margin: "22px 0 10px" }}>Check your email</h1>
       <p style={{ fontSize: 16.5, color: C.secondary, textAlign: "center", margin: "0 0 24px", lineHeight: 1.55 }}>
-        We sent a confirmation link to your email address. Please verify your account to continue to Step 2.
+        We sent a {codeLength}-digit code to your email address. Enter it below to verify your account and continue to Step 2.
       </p>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, background: C.mintSoft, border: "1px solid #DEF0E6", borderRadius: 14, padding: "14px 16px", marginBottom: 18 }}>
@@ -149,20 +175,54 @@ export default function CheckEmailPage() {
           </span>
         ) : (
           <span style={{ display: "block", minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: 14, color: C.secondary }}>Confirmation email sent to</span>
+            <span style={{ display: "block", fontSize: 14, color: C.secondary }}>Code sent to</span>
             <span style={{ display: "block", fontSize: 17, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis" }}>{email || "…"}</span>
           </span>
         )}
       </div>
 
-      <PrimaryButton onClick={() => window.open(mailAppUrl(email), "_blank", "noopener")} style={{ gap: 12 }}>
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submitCode(code);
+        }}
+      >
+        <OtpInput
+          value={code}
+          length={codeLength}
+          onChange={(v) => {
+            setCode(v);
+            if (codeError) setCodeError(null);
+          }}
+          onComplete={submitCode}
+          disabled={verifying}
+          invalid={Boolean(codeError)}
+        />
+        {codeError && (
+          <p role="alert" style={{ color: C.danger, fontSize: 14.5, fontWeight: 600, textAlign: "center", margin: "12px 0 0" }}>
+            {codeError}
+          </p>
+        )}
+        <p style={{ fontSize: 13.5, color: C.muted, textAlign: "center", margin: "12px 0 18px" }}>
+          The code expires in {status?.codeTtlMinutes ?? 10} minutes.
+        </p>
+        <PrimaryButton type="submit" disabled={verifying || code.length !== codeLength} background={C.confirm} hover="confirm">
+          {verifying ? "Verifying…" : "Verify email"}
+          {!verifying && <ArrowRight />}
+        </PrimaryButton>
+      </form>
+      <button
+        type="button"
+        onClick={() => window.open(mailAppUrl(email), "_blank", "noopener")}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, width: "100%", border: 0, background: "transparent", padding: "14px 6px 0", cursor: "pointer", fontSize: 15.5, fontWeight: 700, color: C.primary }}
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="M15 3h6v6M10 14 21 3M18 13v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h7" />
         </svg>
         Open email app
-      </PrimaryButton>
+      </button>
 
-      <OrDivider label="Didn't receive the email?" margin="20px 0 14px" />
+      <OrDivider label="Didn't receive the code?" margin="20px 0 14px" />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginBottom: 18 }}>
         <button
           type="button"
@@ -173,7 +233,7 @@ export default function CheckEmailPage() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden>
             <path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6" />
           </svg>
-          {countdown > 0 ? `Resend in ${countdown}s` : "Resend email"}
+          {countdown > 0 ? `Resend in ${countdown}s` : "Resend code"}
         </button>
         <span style={{ width: 1, height: 22, background: C.inputBorder }} />
         <button
@@ -192,7 +252,7 @@ export default function CheckEmailPage() {
       </div>
 
       {notice && <InfoNote tone={notice.tone} margin="0 0 12px">{notice.text}</InfoNote>}
-      {status?.devVerifyUrl && (
+      {status?.devVerifyCode && (
         <div
           style={{
             margin: "0 0 14px",
@@ -209,11 +269,14 @@ export default function CheckEmailPage() {
           }}
         >
           <span>
-            <strong>Dev link:</strong> Test confirmation link
+            <strong>Dev code:</strong> {status.devVerifyCode}
           </span>
           <button
             type="button"
-            onClick={() => router.push(status.devVerifyUrl!)}
+            onClick={() => {
+              setCode(status.devVerifyCode!);
+              submitCode(status.devVerifyCode!);
+            }}
             style={{
               border: 0,
               background: "#2563EB",
@@ -229,7 +292,7 @@ export default function CheckEmailPage() {
           </button>
         </div>
       )}
-      <InfoNote>Once confirmed, you&apos;ll be taken to the next setup step automatically.</InfoNote>
+      <InfoNote>Once verified, you&apos;ll be taken to the next setup step automatically.</InfoNote>
       <BackToLogin onClick={backToLogin} />
     </AuthCard>
   );

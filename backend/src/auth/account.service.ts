@@ -1,29 +1,20 @@
-import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { SecurityEventsService } from '../common/security/security-events.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import axios from 'axios';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
-import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { slugify } from '../common/utils/slug.util';
-import { DEFAULT_WORKING_HOURS } from '../bookings/bookings.constants';
-import { AuthService, nameFromIdentity } from './auth.service';
-import { AUTH_TOKEN_PURPOSE, AuthTokensService } from './auth-tokens.service';
+import { AuthService } from './auth.service';
+import {
+  AUTH_TOKEN_PURPOSE,
+  AuthTokensService,
+  EMAIL_OTP_TTL_MINUTES,
+} from './auth-tokens.service';
 
 const BCRYPT_ROUNDS = 10;
 /** How many previous passwords a reset refuses to reuse (the current one included). */
 const PASSWORD_HISTORY_DEPTH = 5;
-const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
-
-interface RequestMeta {
-  userAgent?: string;
-  ipAddress?: string;
-}
 
 /** Same three rules the Reset screen lists. Returns the first failure, or null. */
 export function passwordRuleError(password: string): string | null {
@@ -35,13 +26,13 @@ export function passwordRuleError(password: string): string | null {
 }
 
 /**
- * Auth & Onboarding account flows: email confirmation, password reset (anti-enumeration, 30-minute
- * single-use links, no password reuse, every session revoked afterwards) and Google sign-in.
+ * Auth & Onboarding account flows: email confirmation (6-digit code, 10 minutes, 5 attempts),
+ * password reset (anti-enumeration, 30-minute
+ * single-use links, no password reuse, every session revoked afterwards). Social sign-in lives in
+ * `oauth/social-auth.service.ts`.
  */
 @Injectable()
 export class AccountService {
-  private readonly logger = new Logger(AccountService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -61,18 +52,20 @@ export class AccountService {
     const resendInSeconds = user.emailVerifiedAt
       ? 0
       : await this.tokens.resendWaitSeconds(userId);
-    const devVerifyUrl =
+    const devVerifyCode =
       !user.emailVerifiedAt &&
       process.env.NODE_ENV !== 'production' &&
       user.email
-        ? this.tokens.getLatestDevVerifyUrl(user.email)
+        ? this.tokens.getLatestDevVerifyCode(user.email)
         : undefined;
 
     return {
       email: user.email,
       verified: Boolean(user.emailVerifiedAt),
       resendInSeconds,
-      ...(devVerifyUrl ? { devVerifyUrl } : {}),
+      codeLength: 6,
+      codeTtlMinutes: EMAIL_OTP_TTL_MINUTES,
+      ...(devVerifyCode ? { devVerifyCode } : {}),
     };
   }
 
@@ -92,7 +85,7 @@ export class AccountService {
     if (wait > 0) {
       throw new AppException(
         'RESEND_TOO_SOON',
-        `You can resend the email in ${wait}s.`,
+        `You can resend the code in ${wait}s.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -143,20 +136,25 @@ export class AccountService {
     return { sent, email: normalized, resendInSeconds: 45 };
   }
 
-  async verifyEmail(token: string) {
-    const row = await this.tokens.consume(
-      token,
-      AUTH_TOKEN_PURPOSE.VERIFY_EMAIL,
-    );
+  /** Confirms the signed-in user's email with the 6-digit code we emailed them. */
+  async verifyEmail(userId: string, code: string) {
+    const current = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, emailVerifiedAt: true },
+    });
+    if (current.emailVerifiedAt) {
+      return { verified: true, email: current.email };
+    }
+    const row = await this.tokens.verifyEmailOtp(userId, code);
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: row.userId },
       select: { email: true },
     });
-    // A link issued for an address the user has since changed away from doesn't confirm the new one.
+    // A code issued for an address the user has since changed away from doesn't confirm the new one.
     if (row.email && user.email !== row.email) {
       throw new AppException(
-        'AUTH_LINK_INVALID',
-        'This link was for a different email address. Use the newest email we sent.',
+        'AUTH_CODE_INVALID',
+        'This code was for a different email address. Use the newest code we sent.',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -271,172 +269,5 @@ export class AccountService {
       metadata: { sessionsRevoked: true },
     });
     return { reset: true };
-  }
-
-  // ---------------------------------------------------------------- Google sign-in
-
-  providers() {
-    return {
-      google: Boolean(
-        this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID') &&
-        this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET'),
-      ),
-      // No Apple Services ID / key is configured anywhere in this codebase.
-      apple: false,
-    };
-  }
-
-  private googleRedirectUri(): string {
-    const backendUrl =
-      this.config.get<string>('BACKEND_URL') ?? 'http://localhost:5000/api/v1';
-    return `${backendUrl.replace(/\/$/, '')}/auth/google/callback`;
-  }
-
-  private stateSecret() {
-    return `${this.config.get<string>('JWT_SECRET')}:oauth-state`;
-  }
-
-  async googleAuthUrl(): Promise<string> {
-    if (!this.providers().google) {
-      throw new AppException(
-        'PROVIDER_NOT_CONFIGURED',
-        'Google sign-in is not configured.',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-    const state = await this.jwt.signAsync(
-      { n: randomBytes(8).toString('hex') },
-      { secret: this.stateSecret(), expiresIn: '10m' },
-    );
-    const params = new URLSearchParams({
-      client_id: this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID') ?? '',
-      redirect_uri: this.googleRedirectUri(),
-      response_type: 'code',
-      scope: 'openid email profile',
-      prompt: 'select_account',
-      state,
-    });
-    return `${GOOGLE_AUTHORIZE_URL}?${params.toString()}`;
-  }
-
-  /** Returns the frontend URL to redirect the browser to — tokens travel in the URL fragment. */
-  async googleCallback(
-    code: string | undefined,
-    state: string | undefined,
-    meta: RequestMeta,
-  ): Promise<string> {
-    const frontend = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000'
-    ).replace(/\/$/, '');
-    const fail = (reason: string) =>
-      `${frontend}/login?error=${encodeURIComponent(reason)}`;
-    if (!code || !state) return fail('google_cancelled');
-    try {
-      await this.jwt.verifyAsync(state, { secret: this.stateSecret() });
-    } catch {
-      return fail('google_state');
-    }
-    let profile: {
-      sub: string;
-      email?: string;
-      email_verified?: boolean;
-      name?: string;
-    };
-    try {
-      const tokenRes = await axios.post<{ access_token: string }>(
-        GOOGLE_TOKEN_URL,
-        new URLSearchParams({
-          client_id: this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID') ?? '',
-          client_secret:
-            this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET') ?? '',
-          code,
-          grant_type: 'authorization_code',
-          redirect_uri: this.googleRedirectUri(),
-        }).toString(),
-        { headers: { 'content-type': 'application/x-www-form-urlencoded' } },
-      );
-      const info = await axios.get<typeof profile>(GOOGLE_USERINFO_URL, {
-        headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
-      });
-      profile = info.data;
-    } catch (err) {
-      this.logger.error(
-        'Google sign-in exchange failed',
-        err instanceof Error ? err.message : undefined,
-      );
-      return fail('google_exchange');
-    }
-    if (!profile.email || profile.email_verified === false) {
-      return fail('google_email');
-    }
-    const userId = await this.findOrCreateGoogleUser({
-      sub: profile.sub,
-      email: profile.email.toLowerCase(),
-      name: profile.name,
-    });
-    const tokens = await this.auth.issueSessionFor(userId, meta);
-    const fragment = new URLSearchParams({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-    });
-    return `${frontend}/auth/callback#${fragment.toString()}`;
-  }
-
-  private async findOrCreateGoogleUser(p: {
-    sub: string;
-    email: string;
-    name?: string;
-  }): Promise<string> {
-    const byGoogle = await this.prisma.user.findUnique({
-      where: { googleId: p.sub },
-      select: { id: true },
-    });
-    if (byGoogle) return byGoogle.id;
-    const byEmail = await this.prisma.user.findUnique({
-      where: { email: p.email },
-      select: { id: true, emailVerifiedAt: true },
-    });
-    if (byEmail) {
-      await this.prisma.user.update({
-        where: { id: byEmail.id },
-        data: {
-          googleId: p.sub,
-          emailVerifiedAt: byEmail.emailVerifiedAt ?? new Date(),
-        },
-      });
-      return byEmail.id;
-    }
-    // New account: Google already verified the address. The password is random and unknown —
-    // the owner can set one later through "Forgot password".
-    const passwordHash = await bcrypt.hash(
-      randomBytes(32).toString('hex'),
-      BCRYPT_ROUNDS,
-    );
-    const user = await this.prisma.$transaction(async (tx) => {
-      const business = await tx.business.create({
-        data: {
-          name: 'My business',
-          slug: slugify('My business'),
-          email: p.email,
-          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          workingHours: DEFAULT_WORKING_HOURS,
-        },
-      });
-      const created = await tx.user.create({
-        data: {
-          name: p.name?.trim() || nameFromIdentity(p.email),
-          email: p.email,
-          googleId: p.sub,
-          passwordHash,
-          passwordHistory: [passwordHash],
-          emailVerifiedAt: new Date(),
-        },
-      });
-      await tx.businessUser.create({
-        data: { businessId: business.id, userId: created.id, role: Role.owner },
-      });
-      return created;
-    });
-    return user.id;
   }
 }

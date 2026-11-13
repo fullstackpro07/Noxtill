@@ -501,6 +501,9 @@ export interface UserDetail {
     emailVerifiedAt: string | null;
     twoFactorEnabled: boolean;
     googleLinked: boolean;
+    /** Linked sign-in providers (google | microsoft | facebook). */
+    signInProviders: string[];
+    passkeys: number;
     platformStatus: string;
     platformStatusReason: string | null;
     platformStatusAt: string | null;

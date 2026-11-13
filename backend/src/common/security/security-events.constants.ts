@@ -33,6 +33,12 @@ export const SECURITY_EVENT_TYPES = {
   ADMIN_TOTP_FAILED: 'admin_totp_failed',
   ADMIN_TOTP_ENROLLED: 'admin_totp_enrolled',
   ADMIN_SESSION_REVOKED: 'admin_session_revoked',
+  // Auth & Social Login spec §8.1: provider/passkey sign-in, linking and credential changes.
+  LOGIN_PROVIDER_FAILED: 'login_provider_failed',
+  IDENTITY_LINKED: 'identity_linked',
+  IDENTITY_UNLINKED: 'identity_unlinked',
+  PASSKEY_ADDED: 'passkey_added',
+  PASSKEY_REMOVED: 'passkey_removed',
 } as const;
 
 export type SecurityEventType =
@@ -60,12 +66,18 @@ export const BASE_SEVERITY: Record<SecurityEventType, SecuritySeverity> = {
   admin_totp_failed: 'high',
   admin_totp_enrolled: 'medium',
   admin_session_revoked: 'low',
+  login_provider_failed: 'low',
+  identity_linked: 'medium',
+  identity_unlinked: 'medium',
+  passkey_added: 'medium',
+  passkey_removed: 'medium',
 };
 
 /** Types counted by the REPEATED_FAILURE rule. */
 export const FAILURE_TYPES: SecurityEventType[] = [
   'login_failed',
   'login_unknown_account',
+  'login_provider_failed',
   'two_factor_failed',
   'admin_login_failed',
   'admin_totp_failed',

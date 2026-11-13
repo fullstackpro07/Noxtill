@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { SettingsSectionHeader } from "./settings-section-header";
+import { SignInMethods } from "./sign-in-methods";
 import { enableTwoFactor, confirmTwoFactor, disableTwoFactor } from "@/lib/two-factor-api";
 import { useSession } from "@/lib/session";
 import { useAuthStore } from "@/store/auth-store";
@@ -21,7 +22,7 @@ export function SecuritySection() {
 
   return (
     <div>
-      <SettingsSectionHeader title="Security" description="Two-factor authentication for your own login." />
+      <SettingsSectionHeader title="Security" description="Two-factor authentication, connected accounts and passkeys for your own login." />
 
       <div className="rounded-[var(--radius-noxtill)] border border-border bg-surface p-5">
         <div className="flex items-center justify-between gap-4">
@@ -58,6 +59,8 @@ export function SecuritySection() {
           )}
         </div>
       </div>
+
+      <SignInMethods />
 
       {enrolling && <EnrollDialog onClose={() => setEnrolling(false)} />}
       {disabling && <DisableDialog onClose={() => setDisabling(false)} />}

@@ -1088,7 +1088,8 @@ model User {
   emailVerifiedAt      DateTime? @map("email_verified_at")
   /// bcrypt hashes of the last few passwords — a reset refuses to reuse any of them.
   passwordHistory      Json      @default("[]") @map("password_history")
-  /// Google account subject id ("sub") once the user has signed in with Google.
+  /// Legacy Google subject id. Superseded by `AuthIdentity` (backfilled from this column); kept
+  /// only so the identities migration can be rolled back. Not read by any code path.
   googleId             String?   @unique @map("google_id")
   /// Super Admin: active | suspended. A suspended person cannot log in or use any live token.
   platformStatus       String    @default("active") @map("platform_status") @db.VarChar(16)
@@ -1109,11 +1110,101 @@ model User {
   procurementRequestsReviewed   ProcurementRequest[]          @relation("ProcurementRequestReviewer")
   procurementRequestEvents      ProcurementRequestEvent[]     @relation("ProcurementRequestEventActor")
   authTokens                    AuthToken[]
+  authIdentities                AuthIdentity[]
+  passkeyCredentials            PasskeyCredential[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+/// Auth spec §5: one row per external sign-in identity (google | microsoft | facebook) linked to a
+/// Noxtill user. Identity is keyed by the provider's stable subject — never by email.
+model AuthIdentity {
+  id                    String    @id @default(uuid())
+  userId                String    @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider              String    @db.VarChar(16)
+  providerSubject       String    @map("provider_subject") @db.VarChar(191)
+  providerEmail         String?   @map("provider_email") @db.VarChar(191)
+  /// True only when the provider gave a reliable verification claim (Google `email_verified`).
+  providerEmailVerified Boolean   @default(false) @map("provider_email_verified")
+  providerDisplayName   String?   @map("provider_display_name") @db.VarChar(191)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  lastUsedAt            DateTime? @map("last_used_at")
+
+  @@unique([provider, providerSubject])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+/// One OAuth/OIDC round trip: single-use state, nonce and PKCE verifier (auth spec §8.1).
+/// Only a SHA-256 of `state` is stored.
+model OAuthTransaction {
+  id           String    @id @default(uuid())
+  provider     String    @db.VarChar(16)
+  /// login | link
+  purpose      String    @db.VarChar(8)
+  stateHash    String    @unique @map("state_hash") @db.VarChar(64)
+  nonce        String    @db.VarChar(64)
+  codeVerifier String    @map("code_verifier") @db.VarChar(128)
+  /// For purpose=link: the signed-in user the identity will be attached to.
+  userId       String?   @map("user_id")
+  expiresAt    DateTime  @map("expires_at")
+  /// Set when the provider callback consumed this transaction (replay protection).
+  usedAt       DateTime? @map("used_at")
+  /// Callback outcome the frontend redeems with the one-time handoff code — a user id to sign in,
+  /// or a provider profile awaiting an email. Never Noxtill or provider tokens.
+  result           Json?
+  handoffHash      String?   @unique @map("handoff_hash") @db.VarChar(64)
+  handoffExpiresAt DateTime? @map("handoff_expires_at")
+  handoffUsedAt    DateTime? @map("handoff_used_at")
+  /// "Add your email" step for providers that returned no email: one-time signup ticket.
+  ticketHash       String?   @unique @map("ticket_hash") @db.VarChar(64)
+  ticketExpiresAt  DateTime? @map("ticket_expires_at")
+  ticketUsedAt     DateTime? @map("ticket_used_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("oauth_transactions")
+}
+
+/// WebAuthn passkey (auth spec §4.3). Public key + metadata only — the private key and any
+/// biometric data never leave the authenticator.
+model PasskeyCredential {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// base64url credential id.
+  credentialId String    @unique @map("credential_id") @db.VarChar(255)
+  publicKey    Bytes     @map("public_key") @db.Blob
+  counter      Int       @default(0)
+  transports   Json      @default("[]")
+  /// singleDevice | multiDevice
+  deviceType   String    @map("device_type") @db.VarChar(16)
+  backedUp     Boolean   @default(false) @map("backed_up")
+  label        String    @db.VarChar(64)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastUsedAt   DateTime? @map("last_used_at")
+
+  @@index([userId])
+  @@map("passkey_credentials")
+}
+
+/// Short-lived, single-use WebAuthn challenge (register: tied to a user; login: anonymous).
+model WebAuthnChallenge {
+  id        String    @id @default(uuid())
+  userId    String?   @map("user_id")
+  /// register | login
+  purpose   String    @db.VarChar(8)
+  challenge String    @db.VarChar(128)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("webauthn_challenges")
 }
 
 enum VoiceCommandStatus {
@@ -1138,6 +1229,8 @@ model AuthToken {
   tokenHash String    @unique @map("token_hash") @db.VarChar(64)
   /// For verify_email: the address this link confirms.
   email     String?
+  /// For verify_email OTPs: wrong-code attempts against this row (locked after 5).
+  attempts  Int       @default(0)
   expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
   createdAt DateTime  @default(now()) @map("created_at")

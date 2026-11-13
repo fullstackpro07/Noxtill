@@ -265,10 +265,34 @@ export function GoogleIcon() {
   );
 }
 
-export function AppleIcon() {
+export function MicrosoftIcon() {
   return (
-    <svg width="18" height="20" viewBox="0 0 18 20" fill="#000" aria-hidden>
-      <path d="M14.8 10.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.5-.2-2.8.8-3.6.8-.7 0-1.9-.8-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.5.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.1-1.2 2.9-2.3.9-1.3 1.3-2.6 1.3-2.7 0 0-2.5-1-2.5-3.9zM12.4 3.6c.7-.8 1.1-1.9 1-3-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.5z" />
+    <svg width="19" height="19" viewBox="0 0 21 21" aria-hidden>
+      <path fill="#F25022" d="M0 0h10v10H0z" />
+      <path fill="#7FBA00" d="M11 0h10v10H11z" />
+      <path fill="#00A4EF" d="M0 11h10v10H0z" />
+      <path fill="#FFB900" d="M11 11h10v10H11z" />
+    </svg>
+  );
+}
+
+export function FacebookIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="12" r="12" fill="#1877F2" />
+      <path fill="#fff" d="M15.1 15.5l.5-3.5h-3.3V9.8c0-1 .5-1.9 2-1.9h1.5V5c0 0-1.4-.2-2.7-.2-2.8 0-4.6 1.7-4.6 4.7V12H5.4v3.5h3.1V24c.6.1 1.3.1 1.9.1s1.3 0 1.9-.1v-8.5h2.8z" />
+    </svg>
+  );
+}
+
+/** Generic passkey glyph (person + key) — no vendor biometric imagery. */
+export function PasskeyIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="9" cy="7.5" r="3.5" />
+      <path d="M2.5 20v-1.5A5.5 5.5 0 0 1 8 13h2.5" />
+      <circle cx="17.5" cy="13.5" r="2.5" />
+      <path d="M17.5 16v5.5M17.5 19h2" />
     </svg>
   );
 }

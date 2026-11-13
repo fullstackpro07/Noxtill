@@ -8,7 +8,7 @@ export interface AuthUser {
   email: string | null;
   phone: string | null;
   twoFactorEnabled: boolean;
-  /** Auth & Onboarding: false until the emailed confirmation link is clicked. Absent on sessions persisted before this field existed. */
+  /** Auth & Onboarding: false until the emailed verification code is entered. Absent on sessions persisted before this field existed. */
   emailVerified?: boolean;
   role: Role;
   businessUserId: string | null;

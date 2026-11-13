@@ -7,25 +7,30 @@ interface AuthEmail {
   subject: string;
   heading: string;
   body: string;
-  cta: string;
-  url: string;
+  /** Link emails: button + pasteable URL. */
+  cta?: string;
+  url?: string;
+  /** Code emails: a one-time code shown large instead of a button. */
+  code?: string;
   footnote: string;
 }
 
 /**
- * Transactional auth emails (confirm email, reset password) — sent through Resend, the same provider
- * `EmailService` and the Legal & Trust forms already use. When the provider isn't configured (local
- * dev) the link is logged instead, so the flow stays testable; the caller is told it wasn't sent.
+ * Transactional auth emails (email verification code, reset password link) — sent through Resend, the
+ * same provider `EmailService` and the Legal & Trust forms already use. When the provider isn't
+ * configured (local dev) the code/link is logged instead, so the flow stays testable; the caller is
+ * told it wasn't sent.
  */
 @Injectable()
 export class AuthMailerService {
   private readonly logger = new Logger(AuthMailerService.name);
-  private readonly devVerifyUrls = new Map<string, string>();
+  /** Last verification code per address, so dev (no email provider) can still finish signup. */
+  private readonly devVerifyCodes = new Map<string, string>();
 
   constructor(private readonly config: ConfigService) {}
 
-  getLatestDevVerifyUrl(email: string): string | undefined {
-    return this.devVerifyUrls.get(email.toLowerCase());
+  getLatestDevVerifyCode(email: string): string | undefined {
+    return this.devVerifyCodes.get(email.toLowerCase());
   }
 
   frontendUrl(path: string): string {
@@ -35,16 +40,17 @@ export class AuthMailerService {
     return `${base}${path}`;
   }
 
-  sendVerifyEmail(to: string, url: string) {
+  sendVerifyCode(to: string, code: string, ttlMinutes: number) {
+    if (this.config.get<string>('NODE_ENV') !== 'production') {
+      this.devVerifyCodes.set(to.toLowerCase(), code);
+    }
     return this.send({
       to,
-      subject: 'Confirm your Noxtill email',
+      subject: `${code} is your Noxtill verification code`,
       heading: 'Confirm your email',
-      body: 'Thanks for creating a Noxtill account. Confirm this address to continue setting up your business workspace.',
-      cta: 'Confirm email',
-      url,
-      footnote:
-        "This link expires in 24 hours. If you didn't create a Noxtill account, you can ignore this email.",
+      body: 'Thanks for creating a Noxtill account. Enter this code on the verification screen to continue setting up your business workspace.',
+      code,
+      footnote: `This code expires in ${ttlMinutes} minutes and can be used once. Never share it with anyone. If you didn't create a Noxtill account, you can ignore this email.`,
     });
   }
 
@@ -86,16 +92,22 @@ export class AuthMailerService {
 
   /** Returns true when the provider accepted the email. Never throws the provider's raw error (it carries the API key). */
   private async send(mail: AuthEmail): Promise<boolean> {
-    this.devVerifyUrls.set(mail.to.toLowerCase(), mail.url);
+    const isProd = this.config.get<string>('NODE_ENV') === 'production';
+    const secret = mail.code ? `code ${mail.code}` : mail.url;
 
     const apiKey = this.config.get<string>('EMAIL_PROVIDER_KEY');
     const configuredFrom = this.config.get<string>('EMAIL_FROM_ADDRESS');
     if (!apiKey || !configuredFrom) {
       this.logger.warn(
-        `Email provider not configured — "${mail.subject}" for ${mail.to}: ${mail.url}`,
+        isProd
+          ? `Email provider not configured — "${mail.subject}" for ${mail.to} not sent`
+          : `Email provider not configured — "${mail.subject}" for ${mail.to}: ${secret}`,
       );
       return false;
     }
+    const action = mail.code
+      ? `Your code: ${mail.code}`
+      : `${mail.cta}: ${mail.url}`;
 
     const postEmail = (fromAddress: string) =>
       axios.post(
@@ -104,7 +116,7 @@ export class AuthMailerService {
           from: fromAddress,
           to: mail.to,
           subject: mail.subject,
-          text: `${mail.heading}\n\n${mail.body}\n\n${mail.cta}: ${mail.url}\n\n${mail.footnote}`,
+          text: `${mail.heading}\n\n${mail.body}\n\n${action}\n\n${mail.footnote}`,
           html: renderHtml(mail),
         },
         {
@@ -149,8 +161,8 @@ export class AuthMailerService {
         `Failed to deliver "${mail.subject}" to ${mail.to}`,
         deliveryError instanceof Error ? deliveryError.message : undefined,
       );
-      if (this.config.get<string>('NODE_ENV') !== 'production') {
-        this.logger.warn(`Undelivered link for ${mail.to}: ${mail.url}`);
+      if (!isProd) {
+        this.logger.warn(`Undelivered email for ${mail.to}: ${secret}`);
       }
       return false;
     }
@@ -166,14 +178,17 @@ function escapeHtml(s: string): string {
 }
 
 function renderHtml(m: AuthEmail): string {
-  const url = escapeHtml(m.url);
+  const action = m.code
+    ? `<tr><td align="center" style="padding-bottom:22px"><div style="display:inline-block;background:#F1FBF5;border:1px solid #DEF0E6;border-radius:14px;padding:16px 28px;font-family:'SFMono-Regular',Consolas,'Courier New',monospace;font-size:34px;font-weight:800;letter-spacing:.32em;color:#0B6E3B">${escapeHtml(m.code)}</div></td></tr>
+<tr><td style="font-size:13px;line-height:1.5;color:#94A3B8;text-align:center">${escapeHtml(m.footnote)}</td></tr>`
+    : `<tr><td align="center" style="padding-bottom:22px"><a href="${escapeHtml(m.url ?? '')}" style="display:inline-block;background:#0B6E3B;color:#fff;text-decoration:none;font-weight:700;font-size:16px;padding:16px 32px;border-radius:12px">${escapeHtml(m.cta ?? '')}</a></td></tr>
+<tr><td style="font-size:13px;line-height:1.5;color:#94A3B8;text-align:center">${escapeHtml(m.footnote)}<br><br>Or paste this link into your browser:<br><span style="color:#0B6E3B;word-break:break-all">${escapeHtml(m.url ?? '')}</span></td></tr>`;
   return `<!doctype html><html><body style="margin:0;background:#F6F8FA;font-family:'Plus Jakarta Sans',Arial,sans-serif;color:#0F172A">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:470px;background:#fff;border:1px solid #ECEFF3;border-radius:22px;padding:40px 36px">
 <tr><td style="font-size:26px;font-weight:800;letter-spacing:-.02em;text-align:center;padding-bottom:10px">${escapeHtml(m.heading)}</td></tr>
 <tr><td style="font-size:16px;line-height:1.55;color:#64748B;text-align:center;padding-bottom:26px">${escapeHtml(m.body)}</td></tr>
-<tr><td align="center" style="padding-bottom:22px"><a href="${url}" style="display:inline-block;background:#0B6E3B;color:#fff;text-decoration:none;font-weight:700;font-size:16px;padding:16px 32px;border-radius:12px">${escapeHtml(m.cta)}</a></td></tr>
-<tr><td style="font-size:13px;line-height:1.5;color:#94A3B8;text-align:center">${escapeHtml(m.footnote)}<br><br>Or paste this link into your browser:<br><span style="color:#0B6E3B;word-break:break-all">${url}</span></td></tr>
+${action}
 </table>
 <p style="font-size:12px;color:#94A3B8;margin-top:18px">©2026 Noxtill LLC. All Rights Reserved.</p>
 </td></tr></table></body></html>`;
