@@ -1,10 +1,13 @@
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppException } from '../../common/filters/app.exception';
 import type { AuthenticatedUser } from '../../common/tenancy/auth-context';
-import type { AuthService } from '../auth.service';
-import { SignInMethodsService } from '../sign-in-methods.service';
+import {
+  buildAuthKit,
+  cleanupUsers,
+  resetRateLimits,
+  type AuthKit,
+} from '../testing/auth-test-kit';
 import { defaultLabel, PasskeysService } from './passkeys.service';
 
 const codeOf = (p: Promise<unknown>) =>
@@ -17,83 +20,77 @@ const codeOf = (p: Promise<unknown>) =>
   );
 
 /**
- * Passkeys (auth spec §4.3 / §8.2 / §11.3) against real MySQL. Real authenticator ceremonies need a
- * browser; these cover everything Noxtill itself enforces around the library's verification:
- * fresh-auth, challenge single-use/expiry/binding, unknown credentials, the last-method guard and
- * per-user scoping.
+ * Passkeys (spec §5) on real MySQL — registration options, challenge discipline, scoping and the
+ * removal guards. Full signed assertions (counter rule, replay, origin) are exercised with a
+ * software authenticator in `auth-security.acceptance.spec.ts`.
  */
 describe('Passkeys (integration)', () => {
   const ts = Date.now();
+  const prefix = `pk-${ts}-`;
   let prisma: PrismaService;
-  let passkeys: PasskeysService;
+  let kit: AuthKit;
   let disabled: PasskeysService;
   const users: AuthenticatedUser[] = [];
-  const businessIds: string[] = [];
+  const meta = {
+    ipAddress: '198.18.0.1',
+    userAgent: 'jest',
+    deviceId: `d-${ts}`,
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    const config = new ConfigService({
-      AUTH_PASSKEYS_ENABLED: 'true',
-      FRONTEND_URL: 'https://app.example.com',
-    });
-    const methods = new SignInMethodsService(prisma);
-    const auth = { completeLogin: jest.fn() } as unknown as AuthService;
-    passkeys = new PasskeysService(prisma, config, auth, methods);
+    await resetRateLimits(prisma);
+    kit = buildAuthKit(prisma, { AUTH_PASSKEYS_ENABLED: 'true' });
     disabled = new PasskeysService(
       prisma,
       new ConfigService({}),
-      auth,
-      methods,
+      kit.auth,
+      kit.methods,
+      kit.sessions,
+      kit.mfa,
+      kit.rateLimit,
     );
-
-    for (const tag of ['a', 'b']) {
-      const business = await prisma.business.create({
-        data: { name: 'PK', slug: `pk-${ts}-${tag}` },
-      });
-      businessIds.push(business.id);
-      const passwordHash = await bcrypt.hash('Secret123!', 4);
-      // Unverified email, no provider: passkeys are the only extra way in.
-      const user = await prisma.user.create({
-        data: {
-          name: 'PK',
-          email: `pk-${ts}-${tag}@example.com`,
-          passwordHash,
-          emailVerifiedAt: null,
+    for (const [tag, owner] of [
+      ['a', true],
+      ['b', false],
+    ] as const) {
+      const res = await kit.auth.signup(
+        {
+          email: `${prefix}${tag}@example.com`,
+          password: 'a long passphrase here',
         },
+        meta,
+      );
+      await prisma.user.update({
+        where: { id: res.user.id },
+        data: { emailVerifiedAt: new Date() },
       });
-      await prisma.businessUser.create({
-        data: { businessId: business.id, userId: user.id, role: 'owner' },
-      });
-      const session = await prisma.session.create({
-        data: {
-          userId: user.id,
-          businessId: business.id,
-          refreshTokenHash: 'x',
-        },
-      });
+      if (!owner) {
+        await prisma.businessUser.updateMany({
+          where: { userId: res.user.id },
+          data: { role: 'manager' },
+        });
+        await prisma.user.update({
+          where: { id: res.user.id },
+          data: { mfaRequired: false },
+        });
+      }
       users.push({
-        sub: user.id,
-        businessId: business.id,
-        role: 'owner',
+        sub: res.user.id,
+        businessId: res.business.id,
+        role: owner ? 'owner' : 'manager',
         capabilities: [],
-        sessionId: session.id,
+        sessionId: res.tokens.sessionId,
       });
     }
   });
 
   afterAll(async () => {
-    const ids = users.map((u) => u.sub);
-    await prisma.webAuthnChallenge.deleteMany({
-      where: { userId: { in: ids } },
-    });
+    await cleanupUsers(prisma, prefix);
     await prisma.webAuthnChallenge.deleteMany({
       where: { userId: null, createdAt: { gte: new Date(ts - 60_000) } },
     });
-    await prisma.session.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.businessUser.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.user.deleteMany({ where: { id: { in: ids } } });
-    await prisma.business.deleteMany({ where: { id: { in: businessIds } } });
     await prisma.$disconnect();
   });
 
@@ -104,33 +101,42 @@ describe('Passkeys (integration)', () => {
   });
 
   it('RP ID and origin come from the frontend URL by default', () => {
-    expect(passkeys.rp()).toEqual({
+    expect(kit.passkeys.rp()).toEqual({
       rpID: 'app.example.com',
       rpName: 'Noxtill',
       origins: ['https://app.example.com'],
     });
   });
 
-  it('adding a passkey requires fresh authentication', async () => {
-    const [a] = users;
+  it('registration needs fresh auth; user.id is 64 random bytes; UV required for owners, preferred otherwise', async () => {
+    const [owner, manager] = users;
     await prisma.session.update({
-      where: { id: a.sessionId! },
+      where: { id: owner.sessionId! },
       data: { createdAt: new Date(Date.now() - 3_600_000) },
     });
-    expect(await codeOf(passkeys.registrationOptions(a))).toBe(
+    expect(await codeOf(kit.passkeys.registrationOptions(owner))).toBe(
       'REAUTH_REQUIRED',
     );
-    expect(await codeOf(passkeys.registrationOptions(a, 'nope'))).toBe(
+    expect(await codeOf(kit.passkeys.registrationOptions(owner, 'nope'))).toBe(
       'INVALID_PASSWORD',
     );
-    const ok = await passkeys.registrationOptions(a, 'Secret123!');
+    const ok = await kit.passkeys.registrationOptions(
+      owner,
+      'a long passphrase here',
+    );
     expect(ok.options.rp.id).toBe('app.example.com');
+    expect(ok.options.attestation).toBe('none');
     expect(ok.options.authenticatorSelection).toMatchObject({
-      residentKey: 'required',
+      residentKey: 'preferred',
       userVerification: 'required',
     });
-    expect(Buffer.from(ok.options.user.id, 'base64url').toString('utf8')).toBe(
-      a.sub,
+    expect(ok.options.pubKeyCredParams.map((p) => p.alg)).toEqual([-7, -257]);
+    const handle = Buffer.from(ok.options.user.id, 'base64url');
+    expect(handle.length).toBe(64);
+    expect(handle.toString('utf8')).not.toContain(owner.sub);
+    const mgr = await kit.passkeys.registrationOptions(manager);
+    expect(mgr.options.authenticatorSelection?.userVerification).toBe(
+      'preferred',
     );
   });
 
@@ -140,7 +146,7 @@ describe('Passkeys (integration)', () => {
       where: { id: a.sessionId! },
       data: { createdAt: new Date() },
     });
-    const { challengeId } = await passkeys.registrationOptions(a);
+    const { challengeId } = await kit.passkeys.registrationOptions(a);
     const junk = {
       id: 'x',
       rawId: 'x',
@@ -148,67 +154,64 @@ describe('Passkeys (integration)', () => {
       response: {},
       clientExtensionResults: {},
     } as never;
-    // Another user can't redeem it.
     expect(
       await codeOf(
-        passkeys.registrationVerify(b, challengeId, junk, undefined, {}),
+        kit.passkeys.registrationVerify(b, challengeId, junk, undefined, meta),
       ),
     ).toBe('PASSKEY_CHALLENGE_INVALID');
-    // The owner's attempt consumes it (the junk response itself is then rejected by the library)…
     expect(
       await codeOf(
-        passkeys.registrationVerify(a, challengeId, junk, undefined, {}),
+        kit.passkeys.registrationVerify(a, challengeId, junk, undefined, meta),
       ),
     ).toBe('PASSKEY_REJECTED');
-    // …so it can never be replayed.
     expect(
       await codeOf(
-        passkeys.registrationVerify(a, challengeId, junk, undefined, {}),
+        kit.passkeys.registrationVerify(a, challengeId, junk, undefined, meta),
       ),
     ).toBe('PASSKEY_CHALLENGE_INVALID');
   });
 
-  it('an expired sign-in challenge is refused, and an unknown credential is rejected', async () => {
-    const { challengeId } = await passkeys.authenticationOptions();
-    const response = {
+  it('expired challenges and unknown or mismatched credentials are rejected', async () => {
+    const [a, b] = users;
+    const { challengeId } = await kit.passkeys.authenticationOptions();
+    const unknown = {
       id: 'unknown-cred',
       rawId: 'unknown-cred',
       type: 'public-key',
-      response: { userHandle: undefined },
+      response: {},
       clientExtensionResults: {},
     } as never;
     expect(
-      await codeOf(passkeys.authenticationVerify(challengeId, response, {})),
+      await codeOf(
+        kit.passkeys.authenticationVerify(challengeId, unknown, meta),
+      ),
     ).toBe('PASSKEY_REJECTED');
 
-    const second = await passkeys.authenticationOptions();
+    const second = await kit.passkeys.authenticationOptions();
     await prisma.webAuthnChallenge.update({
       where: { id: second.challengeId },
       data: { expiresAt: new Date(Date.now() - 1000) },
     });
     expect(
       await codeOf(
-        passkeys.authenticationVerify(second.challengeId, response, {}),
+        kit.passkeys.authenticationVerify(second.challengeId, unknown, meta),
       ),
     ).toBe('PASSKEY_CHALLENGE_INVALID');
-  });
 
-  it("a passkey's userHandle must match its stored owner", async () => {
-    const [a, b] = users;
     await prisma.passkeyCredential.create({
       data: {
         userId: a.sub,
-        credentialId: `cred-${ts}-owned`,
+        credentialId: `cred-${ts}-a`,
         publicKey: Buffer.from([1]),
         deviceType: 'singleDevice',
         label: 'A',
         transports: [],
       },
     });
-    const { challengeId } = await passkeys.authenticationOptions();
-    const response = {
-      id: `cred-${ts}-owned`,
-      rawId: `cred-${ts}-owned`,
+    const third = await kit.passkeys.authenticationOptions();
+    const mismatched = {
+      id: `cred-${ts}-a`,
+      rawId: `cred-${ts}-a`,
       type: 'public-key',
       response: {
         userHandle: Buffer.from(b.sub, 'utf8').toString('base64url'),
@@ -216,25 +219,29 @@ describe('Passkeys (integration)', () => {
       clientExtensionResults: {},
     } as never;
     expect(
-      await codeOf(passkeys.authenticationVerify(challengeId, response, {})),
+      await codeOf(
+        kit.passkeys.authenticationVerify(third.challengeId, mismatched, meta),
+      ),
     ).toBe('PASSKEY_REJECTED');
   });
 
-  it('listing, renaming and removing are scoped to the owner; the last way in cannot be removed', async () => {
+  it('management is scoped to the owner, and an owner can’t remove their only second factor', async () => {
     const [a, b] = users;
     const only = await prisma.passkeyCredential.findFirstOrThrow({
       where: { userId: a.sub },
     });
-    expect(await codeOf(passkeys.rename(b.sub, only.id, 'Mine now'))).toBe(
+    expect(await codeOf(kit.passkeys.rename(b.sub, only.id, 'Mine now'))).toBe(
       'NOT_FOUND',
     );
-    expect(await codeOf(passkeys.remove(b, only.id))).toBe('NOT_FOUND');
-    expect(await passkeys.list(b.sub)).toHaveLength(0);
+    await prisma.session.update({
+      where: { id: b.sessionId! },
+      data: { createdAt: new Date() },
+    });
+    expect(await codeOf(kit.passkeys.remove(b, only.id))).toBe('NOT_FOUND');
+    expect(await kit.passkeys.list(b.sub)).toHaveLength(0);
 
-    // A has an unverified email, no provider and this one passkey.
-    expect(await codeOf(passkeys.remove(a, only.id))).toBe(
-      'LAST_SIGN_IN_METHOD',
-    );
+    await kit.mfa.sync(a.sub);
+    expect(await codeOf(kit.passkeys.remove(a, only.id))).toBe('MFA_REQUIRED');
     const second = await prisma.passkeyCredential.create({
       data: {
         userId: a.sub,
@@ -245,13 +252,17 @@ describe('Passkeys (integration)', () => {
         transports: [],
       },
     });
-    await expect(passkeys.remove(a, only.id)).resolves.toEqual({
+    await expect(kit.passkeys.remove(a, only.id)).resolves.toMatchObject({
       removed: true,
     });
+    // Removing a sign-in method ends every session (spec §9.3).
+    expect(
+      await prisma.session.count({ where: { userId: a.sub, revokedAt: null } }),
+    ).toBe(0);
     await expect(
-      passkeys.rename(a.sub, second.id, '  Work   laptop '),
+      kit.passkeys.rename(a.sub, second.id, '  Work   laptop '),
     ).resolves.toEqual({ id: second.id, label: 'Work laptop' });
-    expect(await passkeys.list(a.sub)).toEqual([
+    expect(await kit.passkeys.list(a.sub)).toEqual([
       expect.objectContaining({ label: 'Work laptop', synced: true }),
     ]);
   });

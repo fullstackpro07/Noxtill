@@ -5,6 +5,7 @@ import {
   Get,
   Post,
 } from '@nestjs/common';
+import { RequireStepUp } from '../common/decorators/require-step-up.decorator';
 import { CustomersExportService } from './customers-export.service';
 import { CustomerPrivacySettingsService } from './customer-privacy-settings.service';
 import { ExportCustomersDto } from './dto/export-customers.dto';
@@ -21,6 +22,7 @@ export class CustomersExportController {
   /** Bulk export (UPD-BE-101) — gated by the real `CustomerPrivacySettings.staffCanExport` toggle
    * for Staff, not a fixed capability, since the whole point of that setting is to let an owner
    * turn this on/off per business. Owner/Manager are always allowed. */
+  @RequireStepUp()
   @Post('export')
   async export(
     @CurrentUser() user: AuthenticatedUser,

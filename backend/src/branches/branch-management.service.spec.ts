@@ -1,4 +1,4 @@
-import * as bcrypt from 'bcrypt';
+import { verifyPassword } from '../auth/security/password.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BranchManagementService } from './branch-management.service';
 import { AppException } from '../common/filters/app.exception';
@@ -78,11 +78,9 @@ describe('BranchManagementService (UPD-BE-036 follow-up)', () => {
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: result.businessUser.userId },
     });
-    const matches = await bcrypt.compare(
-      result.tempPassword!,
-      user.passwordHash,
-    );
-    expect(matches).toBe(true);
+    // Temp passwords are stored as Argon2id like every other password (auth security spec §7.1).
+    expect(user.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(await verifyPassword(user.passwordHash, result.tempPassword!)).toBe(true);
   });
 
   it('inherits the parent business real configured working hours for a new branch, when it has any', async () => {

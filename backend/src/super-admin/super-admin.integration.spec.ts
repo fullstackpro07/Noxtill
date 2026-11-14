@@ -16,11 +16,7 @@ import { SecurityEventsService } from '../common/security/security-events.servic
 import { PlatformAccessGuard } from '../common/security/platform-access.guard';
 import { AuthTokensService } from '../auth/auth-tokens.service';
 import { AuthMailerService } from '../auth/auth-mailer.service';
-import { AuthService } from '../auth/auth.service';
-import { SessionsService } from '../auth/sessions.service';
-import { TwoFactorService } from '../auth/two-factor.service';
-import { CapabilitiesService } from '../common/capabilities/capabilities.service';
-import type { SendGateService } from '../messaging/send-gate.service';
+import { buildAuthKit } from '../auth/testing/auth-test-kit';
 import { AdminAuditService } from './services/admin-audit.service';
 import { AdminTenantsService } from './services/admin-tenants.service';
 import { AdminEntitlementsService } from './services/admin-entitlements.service';
@@ -456,24 +452,7 @@ describe('Super Admin Control Center (MySQL)', () => {
     it('refuses login for a suspended user and records the attempt', async () => {
       const bid = await makeBusiness('growth');
       const m = await addMember(bid, 'owner', 'CorrectHorse9');
-      const jwt = new JwtService();
-      const sessions = new SessionsService(prisma);
-      const auth = new AuthService(
-        prisma,
-        jwt,
-        new ConfigService({
-          JWT_SECRET: 'a',
-          JWT_REFRESH_SECRET: 'b',
-          LOGIN_MAX_ATTEMPTS: 10,
-        }),
-        new CapabilitiesService(prisma),
-        sessions,
-        new TwoFactorService(prisma, {
-          send: jest.fn(),
-        } as unknown as SendGateService),
-        new AuthTokensService(prisma, new AuthMailerService(config)),
-        securityEvents,
-      );
+      const auth = buildAuthKit(prisma, { LOGIN_MAX_ATTEMPTS: 10 }).auth;
       await expect(
         auth.login({ emailOrPhone: m.email, password: 'wrong-password' }),
       ).rejects.toBeDefined();

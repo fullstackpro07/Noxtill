@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { MetersService } from '../usage/meters.service';
 import { randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../auth/security/password.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -30,8 +30,6 @@ export interface InboxTask {
   assigneeStaffId: string | null;
   dueAt: string | null;
 }
-
-const BCRYPT_ROUNDS = 10;
 
 /**
  * Staff CRUD (BE-056) — owner-only (enforced by @RequireCapability(CAPABILITIES.STAFF_MANAGE) at
@@ -198,7 +196,7 @@ export class StaffService {
       // An invitation holds a seat from the moment it is sent (spec CP-02).
       await this.meters?.assertCapacity(businessId, 'users');
       tempPassword = randomBytes(TEMP_PASSWORD_BYTES).toString('hex');
-      const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+      const passwordHash = await hashPassword(tempPassword);
       user = await this.tenantPrisma.client.user.create({
         data: {
           name: dto.name,
@@ -268,7 +266,28 @@ export class StaffService {
       where: { id: existing.id },
       data: { active: false },
     });
-    return { success: true };
+    // Auth security spec §9.3: a removed staff member's access ends at the moment of removal —
+    // every session (and its refresh-token family) for this business is revoked now, not at expiry.
+    const sessions = await this.tenantPrisma.client.session.findMany({
+      where: {
+        userId: existing.userId,
+        businessId: existing.businessId,
+        revokedAt: null,
+      },
+      select: { id: true },
+    });
+    if (sessions.length) {
+      const ids = sessions.map((s) => s.id);
+      await this.tenantPrisma.client.session.updateMany({
+        where: { id: { in: ids } },
+        data: { revokedAt: new Date(), accessTokenHash: null },
+      });
+      await this.tenantPrisma.client.refreshToken.updateMany({
+        where: { sessionId: { in: ids }, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+    }
+    return { success: true, sessionsRevoked: sessions.length };
   }
 
   async reactivate(id: string) {

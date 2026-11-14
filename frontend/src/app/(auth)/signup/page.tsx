@@ -20,6 +20,7 @@ import {
   Title,
 } from "@/components/auth-flow/auth-ui";
 import { SocialButtons } from "@/components/auth-flow/social-buttons";
+import { Turnstile } from "@/components/auth-flow/turnstile";
 import { establishSession } from "@/components/auth-flow/session";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,17 +32,20 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     const normalized = email.trim().toLowerCase();
     if (!EMAIL_RE.test(normalized)) return setError("Enter a valid work email.");
-    if (password.length < 8) return setError("Use at least 8 characters for your password.");
+    const length = [...password.normalize("NFKC")].length;
+    if (length < 12) return setError("Use at least 12 characters — a few words make a strong, memorable passphrase.");
+    if (length > 128) return setError("Use at most 128 characters.");
     setSubmitting(true);
     try {
-      const tokens = await signup({ email: normalized, password });
-      router.push(await establishSession(tokens));
+      const result = await signup({ email: normalized, password, turnstileToken: turnstileToken ?? undefined });
+      router.push(await establishSession(result));
     } catch (err) {
       setSubmitting(false);
       if (err instanceof ApiError && err.code === "ACCOUNT_EXISTS") {
@@ -72,6 +76,7 @@ export default function SignupPage() {
         <FieldLabel htmlFor="password">Password</FieldLabel>
         <PasswordField id="password" value={password} onChange={setPassword} placeholder="Create a password" marginBottom={10} autoComplete="new-password" />
         <StrengthMeter password={password} />
+        <Turnstile onToken={setTurnstileToken} />
         <FormError message={error} />
         <PrimaryButton type="submit" disabled={submitting}>
           {submitting ? "Creating account…" : "Create Free Account"}

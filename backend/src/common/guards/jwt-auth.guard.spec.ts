@@ -4,6 +4,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { ApiKeyAuthService } from '../../developer/api-key-auth.service';
 import type { AuthenticatedUser } from '../tenancy/auth-context';
 import { Role } from '@prisma/client';
+import type { PrismaService } from '../../prisma/prisma.service';
 
 function makeContext(authorizationHeader: string | undefined): {
   context: ExecutionContext;
@@ -16,6 +17,7 @@ function makeContext(authorizationHeader: string | undefined): {
     headers: { authorization: authorizationHeader },
   };
   const context = {
+    getType: () => 'http',
     switchToHttp: () => ({ getRequest: () => request }),
     getHandler: () => ({}),
     getClass: () => ({}),
@@ -27,8 +29,12 @@ describe('JwtAuthGuard API-key branch (UPD-BE-081)', () => {
   const reflector = {
     getAllAndOverride: () => undefined,
   } as unknown as Reflector;
+  /** No session matches a non-API-key token (opaque session lookup). */
+  const prismaStub = {
+    session: { findUnique: jest.fn().mockResolvedValue(null) },
+  } as unknown as PrismaService;
 
-  it('authenticates a Bearer ntk_ token via ApiKeyAuthService, never touching the JWT strategy', async () => {
+  it('authenticates a Bearer ntk_ token via ApiKeyAuthService, never touching session lookup', async () => {
     const resolvedUser: AuthenticatedUser = {
       sub: 'api-key:1',
       businessId: 'biz-1',
@@ -36,9 +42,13 @@ describe('JwtAuthGuard API-key branch (UPD-BE-081)', () => {
       capabilities: ['ads.manage'] as AuthenticatedUser['capabilities'],
     };
     const authenticate = jest.fn().mockResolvedValue(resolvedUser);
-    const guard = new JwtAuthGuard(reflector, {
-      authenticate,
-    } as unknown as ApiKeyAuthService);
+    const guard = new JwtAuthGuard(
+      reflector,
+      {
+        authenticate,
+      } as unknown as ApiKeyAuthService,
+      prismaStub,
+    );
 
     const { context, request } = makeContext('Bearer ntk_realkeyvalue123');
     const result = await guard.canActivate(context);
@@ -50,9 +60,13 @@ describe('JwtAuthGuard API-key branch (UPD-BE-081)', () => {
 
   it('rejects an invalid/revoked ntk_ key with a real UnauthorizedException, not a silent pass-through', async () => {
     const authenticate = jest.fn().mockResolvedValue(null);
-    const guard = new JwtAuthGuard(reflector, {
-      authenticate,
-    } as unknown as ApiKeyAuthService);
+    const guard = new JwtAuthGuard(
+      reflector,
+      {
+        authenticate,
+      } as unknown as ApiKeyAuthService,
+      prismaStub,
+    );
     const { context } = makeContext('Bearer ntk_revoked_or_fake');
 
     await expect(guard.canActivate(context)).rejects.toThrow(
@@ -60,13 +74,17 @@ describe('JwtAuthGuard API-key branch (UPD-BE-081)', () => {
     );
   });
 
-  it('a plain JWT bearer token never reaches ApiKeyAuthService at all', async () => {
+  it('a non-API-key bearer token never reaches ApiKeyAuthService at all', async () => {
     const authenticate = jest.fn();
-    const guard = new JwtAuthGuard(reflector, {
-      authenticate,
-    } as unknown as ApiKeyAuthService);
-    // super.canActivate() (real Passport JWT verification) will reject this fake token —
-    // the real assertion here is that the ntk_-specific branch is never entered for it.
+    const guard = new JwtAuthGuard(
+      reflector,
+      {
+        authenticate,
+      } as unknown as ApiKeyAuthService,
+      prismaStub,
+    );
+    // The opaque-session lookup rejects this token — the real assertion here is that the
+    // ntk_-specific branch is never entered for it.
     const { context } = makeContext('Bearer a.jwt.token');
     await guard.canActivate(context).catch(() => undefined);
 

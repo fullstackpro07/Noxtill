@@ -1,5 +1,4 @@
-import { apiFetch, BASE_URL } from "@/lib/api-client";
-import { useAuthStore } from "@/store/auth-store";
+import { apiFetch, BASE_URL, csrfHeader } from "@/lib/api-client";
 import { useBranchContextStore } from "@/store/branch-context-store";
 import type { PBtn, PChip, PField, PRowGroup, PSel } from "@/lib/payments-api";
 
@@ -87,9 +86,8 @@ export interface CtOptions {
 }
 
 function headers() {
-  const token = useAuthStore.getState().accessToken;
   const branch = useBranchContextStore.getState().selectedBranchId;
-  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(branch ? { "X-Branch": branch } : {}) };
+  return { ...csrfHeader(), ...(branch ? { "X-Branch": branch } : {}) };
 }
 
 /** Multipart POST through the same auth/branch headers as apiFetch. */
@@ -97,7 +95,7 @@ async function upload<T>(path: string, data: unknown, files: [string, File | nul
   const fd = new FormData();
   fd.append("data", JSON.stringify(data));
   for (const [k, f] of files) if (f) fd.append(k, f);
-  const r = await fetch(`${BASE_URL}${path}`, { method: "POST", headers: headers(), body: fd });
+  const r = await fetch(`${BASE_URL}${path}`, { credentials: "include", method: "POST", headers: headers(), body: fd });
   const text = await r.text();
   const body = text ? (JSON.parse(text) as unknown) : null;
   if (!r.ok) throw new Error((body as { error?: { message?: string } } | null)?.error?.message ?? `Upload failed (${r.status})`);
@@ -106,7 +104,7 @@ async function upload<T>(path: string, data: unknown, files: [string, File | nul
 
 /** Authenticated file download (export / evidence pack) — keeps auth off the URL. */
 async function download(path: string, fallback: string) {
-  const r = await fetch(`${BASE_URL}${path}`, { headers: headers() });
+  const r = await fetch(`${BASE_URL}${path}`, { credentials: "include", headers: headers() });
   if (!r.ok) {
     const t = await r.text();
     let m = `Download failed (${r.status})`;
@@ -222,7 +220,7 @@ export interface SignView {
   blocked: string | null;
 }
 async function pub<T>(path: string, body?: unknown): Promise<T> {
-  const r = await fetch(`${BASE_URL}/public/sign/${path}`, { method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(`${BASE_URL}/public/sign/${path}`, { credentials: "include", method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   const b = text ? (JSON.parse(text) as unknown) : null;
   if (!r.ok) throw new Error((b as { error?: { message?: string } } | null)?.error?.message ?? `Request failed (${r.status})`);

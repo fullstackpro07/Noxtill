@@ -2,6 +2,7 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  MaxLength,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -27,9 +28,16 @@ export class SignupDto {
   @IsString()
   phone?: string;
 
+  /** Length (12–128), breach check and normalisation are enforced by PasswordService. */
   @IsString()
-  @MinLength(8)
+  @MaxLength(256)
   password!: string;
+
+  /** Cloudflare Turnstile token (required only when TURNSTILE_SECRET_KEY is configured). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  turnstileToken?: string;
 
   @IsOptional()
   @IsString()

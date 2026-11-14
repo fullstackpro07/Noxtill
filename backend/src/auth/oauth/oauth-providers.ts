@@ -23,6 +23,8 @@ export interface ProviderProfile {
   /** True only on a reliable provider claim (Google `email_verified`); Microsoft/Facebook: false. */
   emailVerified: boolean;
   name?: string;
+  /** Microsoft `tid`. */
+  tenantId?: string;
 }
 
 interface Credentials {

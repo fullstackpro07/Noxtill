@@ -17,7 +17,7 @@ import {
 
 const CLIENT = 'client-123';
 const NONCE = 'nonce-abc';
-const TID = '9188040d-6c67-4c5b-b112-36a304b66dad';
+const TID = '72f988bf-86f1-41af-91ab-2d7cd011db47'; // a work/school tenant
 
 async function keyset(kid: string) {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
@@ -129,7 +129,7 @@ describe('OIDC ID-token validation (auth spec §8.1)', () => {
     ).toMatch(/^PROVIDER_TOKEN_INVALID:/);
   });
 
-  it('Microsoft: issuer must match the token tenant, and email is never trusted as verified', async () => {
+  it('Microsoft: issuer must match the token tenant, and a work-account email is not trusted as verified', async () => {
     const msClaims = {
       iss: `https://login.microsoftonline.com/${TID}/v2.0`,
       aud: CLIENT,

@@ -1,8 +1,7 @@
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Role } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppException } from '../../common/filters/app.exception';
 import { SecurityEventsService } from '../../common/security/security-events.service';
@@ -11,12 +10,17 @@ import { DEFAULT_WORKING_HOURS } from '../../bookings/bookings.constants';
 import type { AuthenticatedUser } from '../../common/tenancy/auth-context';
 import {
   AuthService,
+  maskEmail,
   nameFromIdentity,
+  type LoginOutcome,
   type RequestMeta,
 } from '../auth.service';
 import { AuthTokensService } from '../auth-tokens.service';
 import { emailVerificationSkipped } from '../email-verification.flag';
 import { SignInMethodsService } from '../sign-in-methods.service';
+import { SessionsService } from '../sessions.service';
+import { AuthRateLimitService } from '../security/auth-rate-limit.service';
+import { hashPassword, normalizeEmail } from '../security/password.service';
 import {
   callbackUrl,
   frontendUrl,
@@ -47,30 +51,44 @@ import {
 const TX_TTL_MS = 10 * 60_000;
 const HANDOFF_TTL_MS = 2 * 60_000;
 const TICKET_TTL_MS = 15 * 60_000;
-const BCRYPT_ROUNDS = 10;
+
+type Profile = Omit<ProviderProfile, 'email'> & { email?: string };
 
 type CallbackResult =
   | { kind: 'user'; userId: string; provider: SocialProvider }
-  | {
-      kind: 'needs_email';
-      provider: SocialProvider;
-      subject: string;
-      name?: string;
-    };
+  | { kind: 'needs_email'; profile: Profile }
+  /** Email matched an account but the provider didn't verify it: confirm the mailbox first (§3.1). */
+  | { kind: 'confirm_link'; userId: string; email: string; profile: Profile };
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 const randomToken = (bytes = 32) => randomBytes(bytes).toString('base64url');
 
+export type ExchangeOutcome =
+  | LoginOutcome
+  | {
+      status: 'needs_email';
+      ticket: string;
+      provider: SocialProvider;
+      name: string | null;
+    }
+  | {
+      status: 'confirm_link';
+      ticket: string;
+      provider: SocialProvider;
+      email: string;
+    };
+
 /**
- * Auth & Social Login spec §4–§8: Google, Microsoft and Facebook sign-in through one architecture.
+ * Google, Microsoft and Facebook sign-in (auth security spec §2–§4).
  *
- * - Social login only proves identity. Noxtill stays the authority for accounts, memberships,
- *   roles and sessions: every successful sign-in ends in `AuthService.completeLogin`, the same gate
- *   as password login (lockout, suspension, 2FA, security events).
- * - Identities are keyed by `(provider, subject)`; email matching never links anything (§6.2).
- * - State, nonce and PKCE verifier live server-side in a single-use `OAuthTransaction`.
- * - The browser never receives Noxtill tokens in a URL: the callback redirects with a one-time,
- *   2-minute handoff code the frontend exchanges over HTTPS (§7 "Callback hardening").
+ * - Identity is `(provider, subject)`, never email.
+ * - Auto-link only when the provider verified the email AND it matches an already-verified
+ *   account (§3.1). A provider-verified identity arriving for an UNVERIFIED local account destroys
+ *   that local credential (pre-emptive takeover, §3.2). Anything else links only after the mailbox
+ *   is proven with an emailed code. Facebook email is never trusted (§3.3).
+ * - State (32 bytes), nonce and PKCE S256 live server-side in a single-use `OAuthTransaction`; the
+ *   browser gets a one-time handoff code, never tokens.
+ * - Every sign-in ends in `AuthService.completeLogin` (lockout, suspension, MFA, owner enrolment).
  */
 @Injectable()
 export class SocialAuthService {
@@ -82,10 +100,11 @@ export class SocialAuthService {
     private readonly auth: AuthService,
     private readonly tokens: AuthTokensService,
     private readonly methods: SignInMethodsService,
+    private readonly sessions: SessionsService,
+    private readonly rateLimit: AuthRateLimitService,
     @Optional() private readonly securityEvents?: SecurityEventsService,
   ) {}
 
-  /** Methods offered in this environment — a method is listed only when it can really complete. */
   providers() {
     return {
       google: providerEnabled(this.config, 'google'),
@@ -104,7 +123,8 @@ export class SocialAuthService {
   ): Promise<string> {
     const p = this.requireEnabled(provider);
     const creds = providerCredentials(this.config, p)!;
-    const state = randomToken();
+    // ≥32 bytes of CSPRNG output (§4.1), stored hashed, single-use.
+    const state = randomToken(32);
     const nonce = randomToken(24);
     const codeVerifier = randomToken(48);
     await this.prisma.oAuthTransaction.create({
@@ -146,6 +166,11 @@ export class SocialAuthService {
     const loginFail = (code: string) =>
       `${front}/auth/callback?error=${encodeURIComponent(code)}`;
     if (!isSocialProvider(provider)) return loginFail('provider_unavailable');
+    try {
+      await this.rateLimit.hit('oauthCallbackIp', meta.ipAddress);
+    } catch {
+      return loginFail('rate_limited');
+    }
 
     const tx = q.state
       ? await this.prisma.oAuthTransaction.findUnique({
@@ -173,9 +198,8 @@ export class SocialAuthService {
     const fail = tx.purpose === 'link' ? linkFail : loginFail;
 
     if (q.error || !q.code) return fail('provider_cancelled');
-    if (!providerEnabled(this.config, provider)) {
+    if (!providerEnabled(this.config, provider))
       return fail('provider_unavailable');
-    }
 
     let profile: ProviderProfile;
     try {
@@ -191,6 +215,8 @@ export class SocialAuthService {
     if (tx.purpose === 'link') {
       if (!tx.userId) return linkFail('provider_state');
       try {
+        // Signed-in "Add a sign-in method" is the safe path: linked even when the provider didn't
+        // verify the email, recorded as unverified (§3.1).
         await this.attach(tx.userId, profile, meta);
       } catch (err) {
         return linkFail(errorCode(err) ?? 'provider_exchange');
@@ -200,12 +226,14 @@ export class SocialAuthService {
 
     let result: CallbackResult;
     try {
-      result = await this.resolveLogin(profile);
+      result = await this.resolveLogin(profile, meta);
     } catch (err) {
       const code = errorCode(err);
       await this.recordFailure(provider, code ?? 'resolve', meta);
       return loginFail(
-        code === 'ACCOUNT_EXISTS' ? 'account_exists' : 'provider_exchange',
+        code === 'PROVIDER_EMAIL_UNVERIFIED'
+          ? 'provider_email_unverified'
+          : 'provider_exchange',
       );
     }
 
@@ -253,10 +281,10 @@ export class SocialAuthService {
     });
   }
 
-  // ------------------------------------------------------------------ handoff / signup
+  // ------------------------------------------------------------------ handoff / follow-up steps
 
   /** Redeems the one-time handoff code from the callback redirect. */
-  async exchange(handoff: string, meta: RequestMeta) {
+  async exchange(handoff: string, meta: RequestMeta): Promise<ExchangeOutcome> {
     const tx = await this.prisma.oAuthTransaction.findUnique({
       where: { handoffHash: sha256(handoff) },
     });
@@ -281,67 +309,90 @@ export class SocialAuthService {
         method: result.provider,
       });
     }
-    const ticket = randomToken();
-    await this.prisma.oAuthTransaction.update({
-      where: { id: tx.id },
-      data: {
-        ticketHash: sha256(ticket),
-        ticketExpiresAt: new Date(Date.now() + TICKET_TTL_MS),
-      },
-    });
+    const ticket = await this.issueTicket(tx.id, result);
+    if (result.kind === 'needs_email') {
+      return {
+        status: 'needs_email',
+        ticket,
+        provider: result.profile.provider,
+        name: result.profile.name ?? null,
+      };
+    }
     return {
-      needsEmail: true as const,
+      status: 'confirm_link',
       ticket,
-      provider: result.provider,
-      name: result.name ?? null,
+      provider: result.profile.provider,
+      email: maskEmail(result.email),
     };
   }
 
-  /** "Add your email" for a provider that returned none: creates the (unverified) account. */
-  async completeSignup(ticket: string, rawEmail: string, meta: RequestMeta) {
-    const tx = await this.prisma.oAuthTransaction.findUnique({
-      where: { ticketHash: sha256(ticket) },
+  /** "Add your email" for a provider that returned none. */
+  async completeSignup(
+    ticket: string,
+    rawEmail: string,
+    meta: RequestMeta,
+  ): Promise<ExchangeOutcome> {
+    const { tx, result } = await this.readTicket(ticket, 'needs_email');
+    const email = normalizeEmail(rawEmail);
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
     });
-    const result = tx?.result as unknown as CallbackResult | undefined;
-    if (
-      !tx ||
-      result?.kind !== 'needs_email' ||
-      tx.ticketUsedAt ||
-      !tx.ticketExpiresAt ||
-      tx.ticketExpiresAt < new Date()
-    ) {
-      throw expired();
+    if (existing) {
+      // An account already has this address: prove the mailbox before linking (§3.1) — never a
+      // second account, never a silent merge (§2.3).
+      await this.sendLinkCode(existing.id, email, meta);
+      await this.useTicket(tx.id);
+      const next: CallbackResult = {
+        kind: 'confirm_link',
+        userId: existing.id,
+        email,
+        profile: result.profile,
+      };
+      const nextTicket = await this.issueTicket(tx.id, next);
+      return {
+        status: 'confirm_link',
+        ticket: nextTicket,
+        provider: result.profile.provider,
+        email: maskEmail(email),
+      };
     }
-    const email = rawEmail.trim().toLowerCase();
-    const label = PROVIDER_LABEL[result.provider];
-    if (
-      await this.prisma.user.findUnique({
-        where: { email },
-        select: { id: true },
-      })
-    ) {
-      throw new AppException(
-        'ACCOUNT_EXISTS',
-        `This email already has a Noxtill account. Log in with it, then connect ${label} from Settings → Security.`,
-        HttpStatus.CONFLICT,
-      );
-    }
-    const consumed = await this.prisma.oAuthTransaction.updateMany({
-      where: { id: tx.id, ticketUsedAt: null },
-      data: { ticketUsedAt: new Date() },
-    });
-    if (consumed.count === 0) throw expired();
-
+    await this.useTicket(tx.id);
     const userId = await this.createAccount(
-      {
-        provider: result.provider,
-        subject: result.subject,
-        name: result.name,
-        emailVerified: false,
-      },
+      { ...result.profile, emailVerified: false },
       email,
     );
-    return this.auth.completeLogin(userId, meta, { method: result.provider });
+    return this.auth.completeLogin(userId, meta, {
+      method: result.profile.provider,
+    });
+  }
+
+  /** The emailed code proves mailbox control; only then is the provider identity linked. */
+  async confirmLink(
+    ticket: string,
+    code: string,
+    meta: RequestMeta,
+  ): Promise<ExchangeOutcome> {
+    const { tx, result } = await this.readTicket(ticket, 'confirm_link');
+    await this.rateLimit.hit('otpVerifyIp', meta.ipAddress);
+    await this.tokens.verifyEmailOtp(result.userId, code, 'link_email');
+    await this.useTicket(tx.id);
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: result.userId },
+    });
+    if (!user.emailVerifiedAt) {
+      // The mailbox owner just proved control; an unverified local password may be an attacker's.
+      await this.destroyLocalCredential(user.id, result.profile.provider);
+    }
+    await this.attach(
+      user.id,
+      { ...result.profile, emailVerified: false },
+      meta,
+      { email: result.email },
+    );
+    return this.auth.completeLogin(user.id, meta, {
+      method: result.profile.provider,
+    });
   }
 
   // ------------------------------------------------------------------ identities (settings)
@@ -354,9 +405,11 @@ export class SocialAuthService {
       }),
       this.prisma.user.findUniqueOrThrow({
         where: { id: userId },
-        select: { email: true, emailVerifiedAt: true },
+        select: { email: true, emailVerifiedAt: true, hasPassword: true },
       }),
-      this.prisma.passkeyCredential.count({ where: { userId } }),
+      this.prisma.passkeyCredential.count({
+        where: { userId, disabledAt: null },
+      }),
     ]);
     const enabled = this.providers();
     return {
@@ -366,8 +419,10 @@ export class SocialAuthService {
           provider,
           label: PROVIDER_LABEL[provider],
           enabled: enabled[provider],
-          connected: !!row,
+          connected: !!row && !row.disabledAt,
+          disabled: !!row?.disabledAt,
           email: row?.providerEmail ?? null,
+          emailVerifiedByProvider: row?.providerEmailVerified ?? false,
           connectedAt: row?.createdAt ?? null,
           lastUsedAt: row?.lastUsedAt ?? null,
         };
@@ -375,6 +430,7 @@ export class SocialAuthService {
       passkeys,
       passkeysEnabled: enabled.passkeys,
       emailVerified: !!(user.email && user.emailVerifiedAt),
+      hasPassword: user.hasPassword,
     };
   }
 
@@ -386,7 +442,7 @@ export class SocialAuthService {
     const p = this.requireEnabled(provider);
     await this.methods.assertFreshAuth(user, password);
     const existing = await this.prisma.authIdentity.findFirst({
-      where: { userId: user.sub, provider: p },
+      where: { userId: user.sub, provider: p, disabledAt: null },
       select: { id: true },
     });
     if (existing) {
@@ -413,22 +469,123 @@ export class SocialAuthService {
       );
     }
     await this.methods.assertCanRemove(user.sub, { provider });
-    // Only the identity link is removed — never the Noxtill account (§6.5).
+    // Only the identity link is removed — never the Noxtill account.
     await this.prisma.authIdentity.delete({ where: { id: row.id } });
-    await this.securityEvents?.record({
+    await this.methods.afterRemoval(user.sub, {
       type: 'identity_unlinked',
-      userId: user.sub,
-      businessId: user.businessId,
+      label: PROVIDER_LABEL[provider],
       metadata: { provider },
     });
-    return { disconnected: true };
+    return { disconnected: true, signedOut: true };
+  }
+
+  // ------------------------------------------------------------------ Meta platform callbacks
+
+  /**
+   * Facebook "Deauthorize callback" (§4.3): the user removed Noxtill from their Facebook settings.
+   * The identity is marked inactive; the account and its business data are untouched.
+   */
+  async facebookDeauthorize(signedRequest: string) {
+    const fbUserId = this.parseSignedRequest(signedRequest);
+    const res = await this.prisma.authIdentity.updateMany({
+      where: {
+        provider: 'facebook',
+        providerSubject: fbUserId,
+        disabledAt: null,
+      },
+      data: { disabledAt: new Date() },
+    });
+    await this.securityEvents?.record({
+      type: 'identity_unlinked',
+      metadata: {
+        provider: 'facebook',
+        via: 'facebook_deauthorize',
+        identities: res.count,
+      },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Facebook "Data deletion request" (§4.3): deletes the Facebook Login data Noxtill holds for that
+   * Facebook user (the identity link) and answers with a confirmation code + status URL. The
+   * Noxtill account itself — which may have other sign-in methods — is not deleted here; account
+   * deletion follows the privacy-request path in the published privacy policy.
+   */
+  async facebookDataDeletion(signedRequest: string) {
+    const fbUserId = this.parseSignedRequest(signedRequest);
+    const confirmationCode = randomBytes(8).toString('hex');
+    await this.prisma.$transaction([
+      this.prisma.authIdentity.deleteMany({
+        where: { provider: 'facebook', providerSubject: fbUserId },
+      }),
+      this.prisma.facebookDeletionRequest.create({
+        data: {
+          confirmationCode,
+          facebookUserId: fbUserId,
+          status: 'completed',
+          completedAt: new Date(),
+        },
+      }),
+    ]);
+    return {
+      url: `${frontendUrl(this.config)}/privacy/facebook-deletion?code=${confirmationCode}`,
+      confirmation_code: confirmationCode,
+    };
+  }
+
+  async facebookDeletionStatus(code: string) {
+    const row = await this.prisma.facebookDeletionRequest.findUnique({
+      where: { confirmationCode: code },
+      select: { status: true, createdAt: true, completedAt: true },
+    });
+    if (!row)
+      throw new AppException(
+        'NOT_FOUND',
+        'Unknown confirmation code.',
+        HttpStatus.NOT_FOUND,
+      );
+    return { confirmationCode: code, ...row };
+  }
+
+  /** Meta signed_request: base64url(HMAC-SHA256(payload, app secret)).base64url(payload JSON). */
+  private parseSignedRequest(signedRequest: string): string {
+    const bad = () =>
+      new AppException(
+        'INVALID_SIGNED_REQUEST',
+        'Invalid signed request.',
+        HttpStatus.BAD_REQUEST,
+      );
+    const creds = providerCredentials(this.config, 'facebook');
+    if (!creds) throw bad();
+    const [sig, payload] = (signedRequest ?? '').split('.');
+    if (!sig || !payload) throw bad();
+    const expected = createHmac('sha256', creds.clientSecret)
+      .update(payload)
+      .digest();
+    const given = Buffer.from(sig, 'base64url');
+    if (given.length !== expected.length || !timingSafeEqual(given, expected))
+      throw bad();
+    let data: { algorithm?: string; user_id?: string };
+    try {
+      data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+        algorithm?: string;
+        user_id?: string;
+      };
+    } catch {
+      throw bad();
+    }
+    if (data.algorithm?.toUpperCase() !== 'HMAC-SHA256' || !data.user_id)
+      throw bad();
+    return String(data.user_id);
   }
 
   // ------------------------------------------------------------------ internals
 
-  /** §6.1–§6.3: linked → that user; existing email → refuse (no auto-link); else new account. */
+  /** §3.1–§3.3: who does this provider identity sign in as? */
   private async resolveLogin(
     profile: ProviderProfile,
+    meta: RequestMeta,
   ): Promise<CallbackResult> {
     const linked = await this.prisma.authIdentity.findUnique({
       where: {
@@ -443,9 +600,12 @@ export class SocialAuthService {
         where: { id: linked.id },
         data: {
           lastUsedAt: new Date(),
+          // Signing in again after a Facebook deauthorize means the user re-authorised the app.
+          disabledAt: null,
           providerEmail: profile.email ?? linked.providerEmail,
           providerEmailVerified: profile.emailVerified,
           providerDisplayName: profile.name ?? linked.providerDisplayName,
+          tenantId: profile.tenantId ?? linked.tenantId,
         },
       });
       return {
@@ -454,40 +614,79 @@ export class SocialAuthService {
         provider: profile.provider,
       };
     }
-    if (!profile.email) {
-      return {
-        kind: 'needs_email',
-        provider: profile.provider,
-        subject: profile.subject,
-        name: profile.name,
-      };
+    // Google must assert a verified email (§4.1 check 7).
+    if (profile.provider === 'google' && !profile.emailVerified) {
+      throw new AppException(
+        'PROVIDER_EMAIL_UNVERIFIED',
+        'Google email not verified.',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
+    if (!profile.email) return { kind: 'needs_email', profile };
+
     const byEmail = await this.prisma.user.findUnique({
       where: { email: profile.email },
-      select: { id: true },
+      select: { id: true, emailVerifiedAt: true },
     });
     if (byEmail) {
-      throw new AppException(
-        'ACCOUNT_EXISTS',
-        'Sign in with your existing method, then connect this provider from Settings → Security.',
-        HttpStatus.CONFLICT,
-      );
+      // Facebook never auto-links; neither does any provider that didn't verify the email.
+      const trusted = profile.emailVerified && profile.provider !== 'facebook';
+      if (!trusted) {
+        await this.sendLinkCode(byEmail.id, profile.email, meta);
+        return {
+          kind: 'confirm_link',
+          userId: byEmail.id,
+          email: profile.email,
+          profile,
+        };
+      }
+      if (!byEmail.emailVerifiedAt) {
+        // Pre-emptive takeover defence (§3.2): the genuine, provider-verified owner arrives for an
+        // address that only has an unverified local password — that password is destroyed.
+        await this.destroyLocalCredential(byEmail.id, profile.provider);
+      }
+      await this.attach(byEmail.id, profile, meta);
+      return { kind: 'user', userId: byEmail.id, provider: profile.provider };
     }
     const userId = await this.createAccount(profile, profile.email);
     return { kind: 'user', userId, provider: profile.provider };
   }
 
+  /** §3.2 step 4: delete the local credential (must reset), mark the email proven, end sessions. */
+  private async destroyLocalCredential(
+    userId: string,
+    provider: SocialProvider,
+  ) {
+    const unusable = await hashPassword(randomToken(32));
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: unusable,
+        passwordHistory: [],
+        hasPassword: false,
+        mustReset: true,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    await this.sessions.revokeAllForUser(userId, 'local_credential_destroyed');
+    await this.securityEvents?.record({
+      type: 'local_credential_destroyed',
+      userId,
+      metadata: { provider },
+    });
+  }
+
   /**
-   * §6.3: a new user goes through the normal Noxtill signup shape — placeholder business, owner
-   * membership via the same rows signup writes, 14-day trial — then onboarding. No role is ever
-   * derived from the provider. Email is confirmed by Noxtill unless the provider verified it.
+   * A new user goes through the normal Noxtill signup shape — placeholder business, owner
+   * membership, 14-day trial — then onboarding. No role is derived from the provider. The email is
+   * confirmed by Noxtill unless the provider verified it.
    */
   private async createAccount(
-    profile: Omit<ProviderProfile, 'email'>,
+    profile: Profile,
     email: string,
   ): Promise<string> {
-    // Random, unknown password: the owner can set one later through "Forgot password".
-    const passwordHash = await bcrypt.hash(randomToken(), BCRYPT_ROUNDS);
+    // Random, unknown password; the account has no password method until one is set via reset.
+    const passwordHash = await hashPassword(randomToken(32));
     const verified = profile.emailVerified || emailVerificationSkipped();
     let userId: string;
     try {
@@ -506,7 +705,9 @@ export class SocialAuthService {
             name: profile.name?.trim() || nameFromIdentity(email),
             email,
             passwordHash,
-            passwordHistory: [passwordHash],
+            passwordHistory: [],
+            hasPassword: false,
+            mfaRequired: true,
             emailVerifiedAt: verified ? new Date() : null,
           },
         });
@@ -521,6 +722,7 @@ export class SocialAuthService {
             providerEmail: email,
             providerEmailVerified: profile.emailVerified,
             providerDisplayName: profile.name,
+            tenantId: profile.tenantId,
             lastUsedAt: new Date(),
           },
         });
@@ -533,7 +735,7 @@ export class SocialAuthService {
       ) {
         throw new AppException(
           'ACCOUNT_EXISTS',
-          'Sign in with your existing method, then connect this provider from Settings → Security.',
+          'An account already exists.',
           HttpStatus.CONFLICT,
         );
       }
@@ -543,11 +745,12 @@ export class SocialAuthService {
     return userId;
   }
 
-  /** §6.2 step 4–5: link to the signed-in user; refuse a subject already owned by someone else. */
+  /** Links to `userId`; refuses a subject already owned by someone else (§6.2 step 5). */
   private async attach(
     userId: string,
-    profile: ProviderProfile,
+    profile: Profile,
     meta: RequestMeta,
+    opts: { email?: string } = {},
   ) {
     const owner = await this.prisma.authIdentity.findUnique({
       where: {
@@ -564,7 +767,13 @@ export class SocialAuthService {
         HttpStatus.CONFLICT,
       );
     }
-    if (owner) return;
+    if (owner) {
+      await this.prisma.authIdentity.update({
+        where: { id: owner.id },
+        data: { disabledAt: null },
+      });
+      return;
+    }
     const sameProvider = await this.prisma.authIdentity.findFirst({
       where: { userId, provider: profile.provider },
       select: { id: true },
@@ -581,9 +790,11 @@ export class SocialAuthService {
         userId,
         provider: profile.provider,
         providerSubject: profile.subject,
-        providerEmail: profile.email,
+        providerEmail: opts.email ?? profile.email,
         providerEmailVerified: profile.emailVerified,
         providerDisplayName: profile.name,
+        tenantId: profile.tenantId,
+        lastUsedAt: new Date(),
       },
     });
     await this.securityEvents?.record({
@@ -591,8 +802,59 @@ export class SocialAuthService {
       userId,
       ipAddress: meta.ipAddress ?? null,
       userAgent: meta.userAgent ?? null,
-      metadata: { provider: profile.provider },
+      metadata: {
+        provider: profile.provider,
+        emailVerifiedByProvider: profile.emailVerified,
+      },
     });
+  }
+
+  private async sendLinkCode(userId: string, email: string, meta: RequestMeta) {
+    await this.rateLimit.hit('otpRequestIp', meta.ipAddress);
+    await this.rateLimit.hit('otpRequestAccount', email);
+    await this.tokens.sendEmailCode(userId, email, 'link_email');
+  }
+
+  private async issueTicket(txId: string, result: CallbackResult) {
+    const ticket = randomToken();
+    await this.prisma.oAuthTransaction.update({
+      where: { id: txId },
+      data: {
+        result: result,
+        ticketHash: sha256(ticket),
+        ticketExpiresAt: new Date(Date.now() + TICKET_TTL_MS),
+        ticketUsedAt: null,
+      },
+    });
+    return ticket;
+  }
+
+  private async readTicket<K extends 'needs_email' | 'confirm_link'>(
+    ticket: string,
+    kind: K,
+  ) {
+    const tx = await this.prisma.oAuthTransaction.findUnique({
+      where: { ticketHash: sha256(ticket) },
+    });
+    const result = tx?.result as unknown as CallbackResult | undefined;
+    if (
+      !tx ||
+      result?.kind !== kind ||
+      tx.ticketUsedAt ||
+      !tx.ticketExpiresAt ||
+      tx.ticketExpiresAt < new Date()
+    ) {
+      throw expired();
+    }
+    return { tx, result: result as Extract<CallbackResult, { kind: K }> };
+  }
+
+  private async useTicket(txId: string) {
+    const res = await this.prisma.oAuthTransaction.updateMany({
+      where: { id: txId, ticketUsedAt: null },
+      data: { ticketUsedAt: new Date() },
+    });
+    if (res.count === 0) throw expired();
   }
 
   private requireEnabled(provider: string): SocialProvider {
@@ -610,7 +872,12 @@ export class SocialAuthService {
   private oidcDef(provider: 'google' | 'microsoft'): OidcProviderDef {
     return provider === 'google'
       ? googleDef()
-      : microsoftDef(this.config.get<string>('MICROSOFT_TENANT') || 'common');
+      : microsoftDef(
+          this.config.get<string>('MICROSOFT_TENANT') || 'common',
+          (this.config.get<string>('MICROSOFT_ALLOWED_TENANTS') ?? '').split(
+            ',',
+          ),
+        );
   }
 
   private async recordFailure(
@@ -630,9 +897,8 @@ export class SocialAuthService {
 }
 
 function errorCode(err: unknown): string | undefined {
-  if (err instanceof AppException) {
+  if (err instanceof AppException)
     return (err.getResponse() as { code?: string }).code;
-  }
   return undefined;
 }
 

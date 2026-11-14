@@ -1,15 +1,9 @@
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { AuthService } from '../auth/auth.service';
 import { AccountService } from '../auth/account.service';
 import { AuthTokensService } from '../auth/auth-tokens.service';
-import { AuthMailerService } from '../auth/auth-mailer.service';
-import { SessionsService } from '../auth/sessions.service';
-import { TwoFactorService } from '../auth/two-factor.service';
-import type { SendGateService } from '../messaging/send-gate.service';
+import { buildAuthKit, resetRateLimits } from '../auth/testing/auth-test-kit';
 import type { AiInfraService } from '../ai/ai-infra.service';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { OnboardingService, offeringsFromText } from './onboarding.service';
@@ -42,26 +36,11 @@ describe('Auth & Onboarding integration', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    const config = new ConfigService({
-      JWT_SECRET: 'test-secret',
-      JWT_REFRESH_SECRET: 'test-refresh',
-      JWT_ACCESS_TTL: '15m',
-      JWT_REFRESH_TTL: '7d',
-    });
-    const jwt = new JwtService();
-    tokens = new AuthTokensService(prisma, new AuthMailerService(config));
-    auth = new AuthService(
-      prisma,
-      jwt,
-      config,
-      new CapabilitiesService(prisma),
-      new SessionsService(prisma),
-      new TwoFactorService(prisma, {
-        send: jest.fn(),
-      } as unknown as SendGateService),
-      tokens,
-    );
-    account = new AccountService(prisma, jwt, config, auth, tokens);
+    await resetRateLimits(prisma);
+    const kit = buildAuthKit(prisma);
+    tokens = kit.tokens;
+    auth = kit.auth;
+    account = kit.account;
     const ai = {
       complete: jest.fn().mockRejectedValue(new Error('AI not configured')),
     } as unknown as AiInfraService;
@@ -89,10 +68,10 @@ describe('Auth & Onboarding integration', () => {
   });
 
   it('email-only signup creates an unverified owner, a placeholder business and a verification code', async () => {
-    const res = await auth.signup({ email, password: 'Salon2026!' });
+    const res = await auth.signup({ email, password: 'Salon booking 2026' });
     userId = res.user.id;
     businessId = res.business.id;
-    expect(res.accessToken).toBeTruthy();
+    expect(res.tokens.accessToken).toBeTruthy();
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     expect(user.emailVerifiedAt).toBeNull();
     expect(user.name).toBe('Onb');
@@ -131,12 +110,17 @@ describe('Auth & Onboarding integration', () => {
     expect(await codeOf(account.verifyEmail(userId, wrong))).toBe(
       'AUTH_CODE_LOCKED',
     );
-    // The right code no longer works once the code is burned.
+    // The right code no longer works: the code is burned and the address locked (spec §6.1).
     expect(await codeOf(account.verifyEmail(userId, code))).toBe(
-      'AUTH_CODE_INVALID',
+      'AUTH_CODE_LOCKED',
     );
     const status = await account.verificationStatus(userId);
     expect(status.verified).toBe(false);
+    // Lift the 15-minute lock so the following specs can continue.
+    await prisma.user.update({
+      where: { id: userId },
+      data: { otpLockedUntil: null },
+    });
   });
 
   it('a new code invalidates the previous one', async () => {
@@ -189,7 +173,7 @@ describe('Auth & Onboarding integration', () => {
   it('forgot password answers the same for unknown addresses', async () => {
     await expect(
       account.forgotPassword('nobody-here@example.com'),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toMatchObject({ ok: true });
   });
 
   it('reset refuses weak and reused passwords, then revokes every session', async () => {
@@ -197,10 +181,12 @@ describe('Auth & Onboarding integration', () => {
     expect(await codeOf(account.resetPassword(weak, 'onlyletters'))).toBe(
       'WEAK_PASSWORD',
     );
-    expect(await codeOf(account.resetPassword(weak, 'Salon2026!'))).toBe(
-      'PASSWORD_REUSED',
-    );
-    await expect(account.resetPassword(weak, 'NewSalon2027')).resolves.toEqual({
+    expect(
+      await codeOf(account.resetPassword(weak, 'Salon booking 2026')),
+    ).toBe('PASSWORD_REUSED');
+    await expect(
+      account.resetPassword(weak, 'New salon passphrase 2027'),
+    ).resolves.toEqual({
       reset: true,
     });
     expect(

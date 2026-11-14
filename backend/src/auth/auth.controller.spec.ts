@@ -3,6 +3,10 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AccountService } from './account.service';
 import { SocialAuthService } from './oauth/social-auth.service';
+import { MfaService } from './mfa/mfa.service';
+import { SignInMethodsService } from './sign-in-methods.service';
+import { TurnstileService } from './security/turnstile.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -22,6 +26,10 @@ describe('AuthController', () => {
         },
         { provide: AccountService, useValue: {} },
         { provide: SocialAuthService, useValue: {} },
+        { provide: MfaService, useValue: {} },
+        { provide: SignInMethodsService, useValue: {} },
+        { provide: TurnstileService, useValue: {} },
+        { provide: PrismaService, useValue: {} },
       ],
     }).compile();
 

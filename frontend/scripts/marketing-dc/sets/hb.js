@@ -1,18 +1,44 @@
 // docs/Noxtill Header Build — site header, Home, Blog, /platform and /ai landing pages.
+
+/** Removes `<a href="/signin">` and the "Start Free Trial" `<a href="/signup">` links, plus the 1px divider
+ *  drawn just before a removed Sign in link. (Home's industry panel "Start free for …" comes from logic.) */
+function dropAuthLinks(tree) {
+  const text = (n) => (typeof n === "string" ? n : Array.isArray(n) ? n[2].map(text).join("") : "");
+  const isAuth = (n) =>
+    Array.isArray(n) && n[0] === "a" &&
+    (n[1].href === "/signin" || (n[1].href === "/signup" && /^\s*Start Free Trial/.test(text(n))));
+  const isDivider = (n) => Array.isArray(n) && n[0] === "div" && /^width:1px; height:14px;/.test(n[1].style || "") && n[2].length === 0;
+  const walk = (nodes) => {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      if (!Array.isArray(n)) continue;
+      if (isAuth(n)) {
+        const signin = n[1].href === "/signin";
+        nodes.splice(i, 1);
+        if (signin) {
+          let j = i - 1;
+          while (j >= 0 && typeof nodes[j] === "string" && !nodes[j].trim()) j--;
+          if (j >= 0 && isDivider(nodes[j])) { nodes.splice(j, 1); i--; }
+        }
+      } else walk(n[2]);
+    }
+  };
+  walk(tree);
+  return tree;
+}
+
 module.exports = {
   src: "docs/Noxtill Header Build",
   stripChrome: false,
   /** Page-specific small-screen fixes, appended after the design's CSS (scoped to .dcx). */
   mobileCss: {
-    // Home hero: once its columns stack (≤1100px) the text column loses the background picture and the visual "stage"
-    // (with its floating status cards) shows the devices part of it, as the design composes it.
-    home: `@media (max-width: 1100px) {
-      section[aria-labelledby="hero-h"] .r-bgl { background-image: none !important; padding-bottom: 0 !important; }
-      section[aria-labelledby="hero-h"] [style*="container-type:inline-size"] {
-        background: url("/marketing/hb/run-your-entire-business-in-one-connecte-muxgs6oj-w72n.png") 100% 55% / 149% auto no-repeat;
-      }
-    }
+    // (The 2026-11-14 Home design's hero is a plain text | picture row and needs no small-screen fix.)
+    // The integrations logo list is a 4-column grid on small screens in the design (its logic switches
+    // display flex ↔ grid); the generic r-g4 rule would collapse it to one logo per row.
+    home: `section[aria-labelledby="int2-h"] ul.r-g4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
     @media (max-width: 640px) {
+      /* FAQ: the "+" stays on the question's row (the generic r-sbw rule would wrap it below long questions). */
+      section[aria-labelledby="faq-h"] summary.r-sbw { flex-wrap: nowrap !important; }
       /* Integrations benefits: one left-aligned list instead of centred items with column dividers. */
       section[aria-labelledby="int2-h"] > div:nth-of-type(2) { padding: 0 24px !important; row-gap: 14px !important; }
       section[aria-labelledby="int2-h"] > div:nth-of-type(2) > div { flex: 1 1 100% !important; justify-content: flex-start !important; border-left: 0 !important; }
@@ -35,14 +61,16 @@ module.exports = {
       section[aria-labelledby="o-h"] [role="img"] > div:nth-child(2) { padding: 0 !important; min-height: 0 !important; }
       section[aria-labelledby="o-h"] [role="img"] > div:nth-child(2) > div[style*="position:absolute"] { position: relative !important; inset: auto !important; height: 100% !important; }
       section[aria-labelledby="o-h"] [role="img"] > div:nth-child(2) > div:not([style*="position:absolute"]) { display: none !important; }
-      /* AI cards keep their two short "understands / can do" columns. */
-      section[aria-labelledby="ai-h"] article .r-g2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
     }`,
     // The coded storefront mockup is empty (the storefront picture replaced it); its frame alone drew a
     // thin line across the picture.
     "platform--website-commerce": `[aria-label^="Willow & Pine demo storefront"] > div:has(> [data-nx-scale]) { display: none !important; }`,
   },
   transform: {
+    // Owner decision (2026-11-13, "remove signing in buttons"): no Sign in / Start Free Trial links in the
+    // header or on Home. This used to be a hand edit of the generated JSON; as a transform it survives a rebuild.
+    header: (tree) => dropAuthLinks(tree),
+    home: (tree) => dropAuthLinks(tree),
     // The design's sticky "On this page" bar followed the reader down over the content (owner review).
     "platform--finance-accounting": (tree) => {
       const drop = (nodes) => { for (let i = nodes.length - 1; i >= 0; i--) { const n = nodes[i]; if (!Array.isArray(n)) continue; if (n[0] === "nav" && n[1]["aria-label"] === "On this page") nodes.splice(i, 1); else drop(n[2]); } };

@@ -1,5 +1,4 @@
-import { apiFetch, BASE_URL } from "@/lib/api-client";
-import { useAuthStore } from "@/store/auth-store";
+import { apiFetch, BASE_URL, csrfHeader } from "@/lib/api-client";
 import { useBranchContextStore } from "@/store/branch-context-store";
 import type { PBtn, PChip, PField, PRowGroup, PSel } from "@/lib/payments-api";
 
@@ -93,11 +92,10 @@ type Msg = { ok?: boolean; msg?: string; approval?: boolean };
 
 /** Multipart upload through the same auth/branch headers as apiFetch. */
 async function upload<T>(path: string, fd: FormData): Promise<T> {
-  const token = useAuthStore.getState().accessToken;
   const branch = useBranchContextStore.getState().selectedBranchId;
-  const r = await fetch(`${BASE_URL}${path}`, {
+  const r = await fetch(`${BASE_URL}${path}`, { credentials: "include",
     method: "POST",
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(branch ? { "X-Branch": branch } : {}) },
+    headers: { ...csrfHeader(), ...(branch ? { "X-Branch": branch } : {}) },
     body: fd,
   });
   const text = await r.text();
@@ -214,10 +212,9 @@ export const fsApi = {
 
 /** Download an export through the authenticated fetch (keeps auth headers off the URL). */
 export async function fsDownload(what: string, format: string, s: FsScope, ids: string[] = []) {
-  const token = useAuthStore.getState().accessToken;
   const branch = useBranchContextStore.getState().selectedBranchId;
-  const r = await fetch(`${BASE_URL}${P}/export${sq({ ...s, what, format, ids: ids.join(",") })}`, {
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(branch ? { "X-Branch": branch } : {}) },
+  const r = await fetch(`${BASE_URL}${P}/export${sq({ ...s, what, format, ids: ids.join(",") })}`, { credentials: "include",
+    headers: { ...csrfHeader(), ...(branch ? { "X-Branch": branch } : {}) },
   });
   if (!r.ok) {
     const t = await r.text();

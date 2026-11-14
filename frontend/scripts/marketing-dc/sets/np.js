@@ -5,6 +5,7 @@
 // scripts/marketing-dc/authored (build.js → pages/<key>.dc.html), converted like the rest.
 /* eslint-disable @typescript-eslint/no-require-imports */
 const featureHero = require("./np-feature-hero");
+const featuresIndex = require("./np-features-index");
 // Business Listings hero: the background picture has an empty card drawn at the end of each dashed
 // line, but the coded badges were pixel-placed in three different containers and missed them. Move the
 // badges into one layer over the picture and centre each on its card (measured from the picture, % of
@@ -401,6 +402,8 @@ module.exports = {
   cssTransform: (key, css) => (key.startsWith("features--") ? featureHero.recolor(css) + featureHero.MOBILE_CSS.replace("{ [data-fhero]", "{ .dcx [data-fhero]") + featureHero.scaleCss(key.slice("features--".length)) + featureHero.FEATURE_CSS : css) + (PAGE_CSS[key] || ""),
   logicTransform: (key, body) => (key.startsWith("features--") ? featureHero.recolor(body) : body),
   transform: {
+    // /features: real pictures for the placeholder thumbnails/posts, and the "40+ modules" CTA.
+    features: (tree) => featuresIndex.fill(tree),
     resources: (tree) =>
       fillPlaceholders(tree, [
         ["np/pasted-1788938876908-0-mtts0npb-403t.png", "Paper records beside a laptop showing the same records in Noxtill"],

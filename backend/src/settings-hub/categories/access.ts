@@ -631,9 +631,16 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'password-min',
               label: 'Password rule',
-              description: 'The minimum password length checked at sign-up.',
+              description:
+                'Checked whenever a password is set: length, and whether it appears in a known data breach (k-anonymity check — the password never leaves Noxtill). Stored with Argon2id.',
               risk: 'High',
-              state: () => ({ value: 'At least 8 characters' }),
+              state: () => ({
+                value:
+                  (process.env.AUTH_BREACH_CHECK ?? 'true').toLowerCase() ===
+                  'false'
+                    ? '12–128 characters · breach check off'
+                    : '12–128 characters · breach-checked',
+              }),
             }),
             row({
               key: 'lockout',
@@ -642,7 +649,7 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
                 'Failed attempts allowed before an account is locked, and for how long.',
               risk: 'High',
               state: () => ({
-                value: `${authEnv('LOGIN_MAX_ATTEMPTS', '5')} attempts · ${authEnv('LOGIN_LOCK_MINUTES', '15')} minutes`,
+                value: `${authEnv('LOGIN_MAX_ATTEMPTS', '10')} attempts · ${authEnv('LOGIN_LOCK_MINUTES', '15')} minutes`,
               }),
             }),
             row({
@@ -702,7 +709,8 @@ export function accessCategories(d: HubDeps): CategoryDef[] {
             row({
               key: 'two-factor-mine',
               label: 'Your two-factor status',
-              description: 'Whether two-factor is on for your own account.',
+              description:
+                'Whether your own account has a second factor (an authenticator app or a passkey).',
               scope: 'User',
               link: {
                 label: 'Manage two-factor',

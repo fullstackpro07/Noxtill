@@ -154,7 +154,7 @@ export function UserDetailView({ id }: { id: string }) {
           <KeyValue
             rows={[
               ["Account", <StatusBadge key="s" status={u.platformStatus} />],
-              ["2FA (WhatsApp code)", u.twoFactorEnabled ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>],
+              ["Second factor (app or passkey)", u.twoFactorEnabled ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>],
               ["Failed attempts", String(u.failedLoginAttempts)],
               ["Locked until", u.lockedUntil && new Date(u.lockedUntil) > new Date() ? fmtDateTime(u.lockedUntil) : "Not locked"],
               ["Open sessions", String(open.length)],

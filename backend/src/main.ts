@@ -5,6 +5,8 @@ import { raw } from 'express';
 import { AppModule } from './app.module';
 import { resolveDatabaseUrl } from './prisma/resolve-database-url';
 import { requestIdMiddleware } from './common/request-id.middleware';
+import cookieParser from 'cookie-parser';
+import { ScrubbingLogger } from './auth/security/secret-scrubber';
 
 const MIN_SECRET_LENGTH = 22; // spec §6
 const PLACEHOLDER_SECRETS = new Set(['your-secret', 'your-refresh-secret']);
@@ -43,7 +45,11 @@ async function bootstrap() {
   validateEnv();
 
   // rawBody is needed to verify webhook signatures (Meta/Stripe HMAC) against the exact bytes sent.
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  // Secrets (passwords, codes, tokens, session ids) are redacted at the logging layer (spec §11).
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    logger: new ScrubbingLogger(),
+  });
   // LiveKit signs the exact application/webhook+json bytes, not re-serialized JSON.
   app.use(
     '/api/v1/voice/webhook/livekit',
@@ -52,6 +58,8 @@ async function bootstrap() {
 
   app.use(requestIdMiddleware);
   app.use(helmet());
+  // HttpOnly session cookies (spec §8.2).
+  app.use(cookieParser());
 
   const corsAllowlist = (process.env.CORS_ALLOWLIST ?? 'http://localhost:3000')
     .split(',')

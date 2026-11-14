@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { RequireStepUp } from '../common/decorators/require-step-up.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
@@ -21,6 +22,7 @@ export class SubscriptionController {
   }
 
   @RequireCapability(CAPABILITIES.BILLING_MANAGE)
+  @RequireStepUp()
   @Post('subscription/change-plan')
   changePlan(
     @CurrentUser() user: AuthenticatedUser,
@@ -37,6 +39,7 @@ export class SubscriptionController {
   }
 
   @RequireCapability(CAPABILITIES.BILLING_MANAGE)
+  @RequireStepUp()
   @Post('subscription/cancel')
   cancel(@CurrentUser() user: AuthenticatedUser) {
     return this.subscriptions.cancel(user.businessId, user.sub);
@@ -49,12 +52,14 @@ export class SubscriptionController {
   }
 
   @RequireCapability(CAPABILITIES.BILLING_MANAGE)
+  @RequireStepUp()
   @Post('subscription/payment-methods/setup')
   setup(@CurrentUser() user: AuthenticatedUser, @Body() dto: PaymentSetupDto) {
     return this.paymentMethods.startSetup(user.businessId, user.sub, dto);
   }
 
   @RequireCapability(CAPABILITIES.BILLING_MANAGE)
+  @RequireStepUp()
   @Post('subscription/payment-methods/:id/default')
   makeDefault(
     @CurrentUser() user: AuthenticatedUser,

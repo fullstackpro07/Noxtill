@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
+import { RequireStepUp } from '../common/decorators/require-step-up.decorator';
 import { BillingService } from './billing.service';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
 import { UpdateAddOnsDto } from './dto/update-add-ons.dto';
@@ -18,6 +19,7 @@ export class BillingController {
   }
 
   @RequireCapability(CAPABILITIES.BILLING_MANAGE)
+  @RequireStepUp()
   @Post('checkout')
   checkout(
     @CurrentUser() user: AuthenticatedUser,
@@ -53,6 +55,7 @@ export class BillingController {
 
   /** UPD-BE-121 */
   @RequireCapability(CAPABILITIES.BILLING_MANAGE)
+  @RequireStepUp()
   @Post('cancel')
   cancel(@CurrentUser() user: AuthenticatedUser) {
     return this.billingService.cancelOwnSubscription(user.businessId);

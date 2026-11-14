@@ -1,5 +1,4 @@
-import { apiFetch, BASE_URL } from "@/lib/api-client";
-import { useAuthStore } from "@/store/auth-store";
+import { apiFetch, BASE_URL, csrfHeader } from "@/lib/api-client";
 import { useBranchContextStore } from "@/store/branch-context-store";
 
 /** Settings → Usage & Limits and Account & billing (backend `src/usage/`). */
@@ -260,10 +259,9 @@ export const makeCardDefault = (id: string, password: string) =>
 
 /** Download the usage history CSV with the session's auth (same pattern as the other module exports). */
 export async function downloadUsageCsv(): Promise<void> {
-  const token = useAuthStore.getState().accessToken;
   const branch = useBranchContextStore.getState().selectedBranchId;
-  const res = await fetch(`${BASE_URL}/usage/history.csv`, {
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(branch ? { "X-Branch": branch } : {}) },
+  const res = await fetch(`${BASE_URL}/usage/history.csv`, { credentials: "include",
+    headers: { ...csrfHeader(), ...(branch ? { "X-Branch": branch } : {}) },
   });
   if (!res.ok) throw new Error(`Export failed (${res.status})`);
   const blob = await res.blob();

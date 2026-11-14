@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import Stripe from 'stripe';
-import * as bcrypt from 'bcrypt';
+import { verifyPassword } from '../auth/security/password.service';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
@@ -532,7 +532,7 @@ export class SubscriptionService {
       where: { id: userId },
       select: { passwordHash: true },
     });
-    if (!(await bcrypt.compare(password, user.passwordHash))) {
+    if (!(await verifyPassword(user.passwordHash, password))) {
       throw new AppException(
         USAGE_ERROR_CODES.INVALID_PASSWORD,
         "That password doesn't match. Try again.",

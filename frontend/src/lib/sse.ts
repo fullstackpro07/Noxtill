@@ -1,4 +1,3 @@
-import { useAuthStore } from "@/store/auth-store";
 import { useBranchContextStore } from "@/store/branch-context-store";
 import { refreshAccessToken, BASE_URL } from "@/lib/api-client";
 
@@ -11,14 +10,14 @@ export interface SseEvent {
 
 /**
  * Real SSE consumption over `fetch` + a streamed response body, not the native `EventSource` API —
- * `EventSource` cannot attach an `Authorization` header (or the app's `X-Branch` header), and every
- * SSE route in this backend requires both, same as any other authenticated endpoint. This
+ * `EventSource` cannot attach the app's `X-Branch` header, which every SSE route in this backend
+ * requires, same as any other authenticated endpoint. (The session itself is an HttpOnly cookie.) This
  * reimplements the pieces `EventSource` would normally give for free: framing (`field: value` lines
  * separated by a blank line), and auto-reconnect with backoff on a dropped connection.
  *
  * `onEvent` fires for every parsed frame; the caller distinguishes event types via `event.type`.
- * Reconnection carries a fresh access token each attempt, so a token refreshed by an unrelated
- * `apiFetch` call mid-session is picked up automatically on the next reconnect.
+ * Reconnection re-sends the cookies, so a session refreshed by an unrelated `apiFetch` call
+ * mid-session is picked up automatically on the next reconnect.
  */
 export function subscribeSse(
   path: string,
@@ -54,20 +53,17 @@ async function connectOnce(
   handlers: { onEvent: (event: SseEvent) => void; onStatusChange?: (status: "connecting" | "open" | "closed") => void },
   signal: AbortSignal,
 ): Promise<void> {
-  const { accessToken } = useAuthStore.getState();
+  // The session is the HttpOnly cookie pair (auth security spec §8.2); the browser sends it.
   const headers = new Headers({ Accept: "text/event-stream" });
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   const selectedBranchId = useBranchContextStore.getState().selectedBranchId;
   if (selectedBranchId) headers.set("X-Branch", selectedBranchId);
 
-  let res = await fetch(`${BASE_URL}${path}`, { headers, signal });
+  let res = await fetch(`${BASE_URL}${path}`, { headers, signal, credentials: "include" });
 
   if (res.status === 401) {
     const refreshed = await refreshAccessToken();
     if (!refreshed) return; // session truly expired — apiFetch's own 401 handling (elsewhere) redirects to /login
-    const retryHeaders = new Headers(headers);
-    retryHeaders.set("Authorization", `Bearer ${useAuthStore.getState().accessToken}`);
-    res = await fetch(`${BASE_URL}${path}`, { headers: retryHeaders, signal });
+    res = await fetch(`${BASE_URL}${path}`, { headers, signal, credentials: "include" });
   }
 
   if (!res.ok || !res.body) {

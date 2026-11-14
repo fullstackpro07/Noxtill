@@ -9,6 +9,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { RequireStepUp } from '../common/decorators/require-step-up.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -583,6 +584,7 @@ export class PeopleController {
   ) {
     return this.payroll.correction(await this.actor(u), b.runId, b.ids);
   }
+  @RequireStepUp()
   @Post('runs/:id/act')
   async runAct(
     @CurrentUser() u: AuthenticatedUser,

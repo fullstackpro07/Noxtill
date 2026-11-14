@@ -1,5 +1,5 @@
+import { csrfHeader } from "@/lib/api-client";
 import { apiFetch, BASE_URL } from "./api-client";
-import { useAuthStore } from "@/store/auth-store";
 import { useBranchContextStore } from "@/store/branch-context-store";
 
 export type SlaKey = "Breached" | "At Risk" | "Healthy" | "Paused" | "Met" | "Missed" | "None";
@@ -346,9 +346,8 @@ export const hdApi = {
 
 /** Downloads a server-generated export (CSV / real .xlsx) with auth + branch headers. */
 export async function hdDownload(path: string, fallbackName: string): Promise<number> {
-  const token = useAuthStore.getState().accessToken;
   const branch = useBranchContextStore.getState().selectedBranchId;
-  const res = await fetch(`${BASE_URL}${H}${path}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(branch ? { "X-Branch": branch } : {}) } });
+  const res = await fetch(`${BASE_URL}${H}${path}`, { credentials: "include", headers: { ...csrfHeader(), ...(branch ? { "X-Branch": branch } : {}) } });
   if (!res.ok) {
     let msg = `Export failed (${res.status})`;
     try {

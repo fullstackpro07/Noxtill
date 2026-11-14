@@ -24,7 +24,7 @@ function mailAppUrl(email: string): string {
 export default function CheckEmailPage() {
   const router = useRouter();
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   // Resend cooldown: an absolute deadline (from the server, or from our last resend) + a 1s clock.
   const [deadline, setDeadline] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -37,14 +37,14 @@ export default function CheckEmailPage() {
   const [codeError, setCodeError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (hasHydrated && !accessToken) router.replace("/login?next=/check-email");
-  }, [hasHydrated, accessToken, router]);
+    if (hasHydrated && !isAuthenticated) router.replace("/login?next=/check-email");
+  }, [hasHydrated, isAuthenticated, router]);
 
   // Polls the real verification flag so confirming in another tab moves this one on automatically.
   const { data: status, refetch, dataUpdatedAt } = useQuery({
     queryKey: ["auth", "verification"],
     queryFn: fetchVerificationStatus,
-    enabled: Boolean(accessToken),
+    enabled: Boolean(isAuthenticated),
     refetchInterval: 5000,
   });
 
@@ -129,7 +129,7 @@ export default function CheckEmailPage() {
     router.push("/login");
   }
 
-  if (!hasHydrated || !accessToken) return null;
+  if (!hasHydrated || !isAuthenticated) return null;
 
   return (
     <AuthCard wide>

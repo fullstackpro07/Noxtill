@@ -13,13 +13,14 @@ interface AuthEmail {
   /** Code emails: a one-time code shown large instead of a button. */
   code?: string;
   footnote: string;
+  /** Secret-free description used in log lines (subjects can contain the code). */
+  label: string;
 }
 
 /**
  * Transactional auth emails (email verification code, reset password link) — sent through Resend, the
  * same provider `EmailService` and the Legal & Trust forms already use. When the provider isn't
- * configured (local dev) the code/link is logged instead, so the flow stays testable; the caller is
- * told it wasn't sent.
+ * configured the caller is told it wasn't sent; codes and links are never written to logs.
  */
 @Injectable()
 export class AuthMailerService {
@@ -50,11 +51,38 @@ export class AuthMailerService {
       heading: 'Confirm your email',
       body: 'Thanks for creating a Noxtill account. Enter this code on the verification screen to continue setting up your business workspace.',
       code,
+      label: 'email verification code',
       footnote: `This code expires in ${ttlMinutes} minutes and can be used once. Never share it with anyone. If you didn't create a Noxtill account, you can ignore this email.`,
     });
   }
 
-  sendPasswordReset(to: string, url: string) {
+  /** New-device sign-in and provider-link confirmation codes (spec §3.1, §7.3). */
+  sendSignInCode(
+    to: string,
+    code: string,
+    ttlMinutes: number,
+    purpose: 'login_device' | 'link_email',
+  ) {
+    if (this.config.get<string>('NODE_ENV') !== 'production') {
+      this.devVerifyCodes.set(to.toLowerCase(), code);
+    }
+    const link = purpose === 'link_email';
+    return this.send({
+      to,
+      subject: link
+        ? `${code} is your code to connect a sign-in method`
+        : `${code} is your Noxtill sign-in code`,
+      heading: link ? 'Confirm it’s you' : 'Sign-in from a new device',
+      body: link
+        ? 'Someone is trying to connect a new sign-in method to the Noxtill account for this email. Enter this code to confirm it was you.'
+        : 'Your password was entered correctly on a device we haven’t seen before. Enter this code to finish signing in.',
+      code,
+      label: link ? 'link confirmation code' : 'new-device sign-in code',
+      footnote: `This code expires in ${ttlMinutes} minutes and can be used once. Never share it. If this wasn't you, change your password — someone may know it.`,
+    });
+  }
+
+  sendPasswordReset(to: string, url: string, ttlMinutes = 15) {
     return this.send({
       to,
       subject: 'Reset your Noxtill password',
@@ -62,8 +90,8 @@ export class AuthMailerService {
       body: 'We received a request to reset the password for this Noxtill account.',
       cta: 'Set a new password',
       url,
-      footnote:
-        "This link expires in 30 minutes and can be used once. If you didn't ask for a reset, you can ignore this email — your password stays the same.",
+      label: 'password reset link',
+      footnote: `This link expires in ${ttlMinutes} minutes and can be used once. If you didn't ask for a reset, you can ignore this email — your password stays the same.`,
     });
   }
 
@@ -87,21 +115,22 @@ export class AuthMailerService {
       cta: notice.cta,
       url: this.frontendUrl(notice.path),
       footnote: notice.footnote,
+      label: notice.subject,
     });
   }
 
   /** Returns true when the provider accepted the email. Never throws the provider's raw error (it carries the API key). */
   private async send(mail: AuthEmail): Promise<boolean> {
-    const isProd = this.config.get<string>('NODE_ENV') === 'production';
-    const secret = mail.code ? `code ${mail.code}` : mail.url;
-
     const apiKey = this.config.get<string>('EMAIL_PROVIDER_KEY');
-    const configuredFrom = this.config.get<string>('EMAIL_FROM_ADDRESS');
+    // Auth mail goes out on its own transactional sender/subdomain (spec §6.4), separate from
+    // anything marketing sends; falls back to the shared sender until one is configured.
+    const configuredFrom =
+      this.config.get<string>('AUTH_EMAIL_FROM_ADDRESS') ||
+      this.config.get<string>('EMAIL_FROM_ADDRESS');
     if (!apiKey || !configuredFrom) {
+      // Never log the code or link itself (spec §11) — dev reads codes from the check-email screen.
       this.logger.warn(
-        isProd
-          ? `Email provider not configured — "${mail.subject}" for ${mail.to} not sent`
-          : `Email provider not configured — "${mail.subject}" for ${mail.to}: ${secret}`,
+        `Email provider not configured — ${mail.label} not sent`,
       );
       return false;
     }
@@ -158,12 +187,9 @@ export class AuthMailerService {
       }
 
       this.logger.error(
-        `Failed to deliver "${mail.subject}" to ${mail.to}`,
+        `Failed to deliver ${mail.label}`,
         deliveryError instanceof Error ? deliveryError.message : undefined,
       );
-      if (!isProd) {
-        this.logger.warn(`Undelivered email for ${mail.to}: ${secret}`);
-      }
       return false;
     }
   }
