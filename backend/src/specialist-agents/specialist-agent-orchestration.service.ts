@@ -409,6 +409,7 @@ export class SpecialistAgentOrchestrationService {
 
   async run(businessId: string, actorUserId: string, idempotencyKey?: string) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
+    await this.assertOwnerCanOperate(scopedBusinessId, actorUserId);
     if (!idempotencyKey) {
       throw new AppException(
         'SPECIALIST_ORCHESTRATION_IDEMPOTENCY_REQUIRED',
@@ -558,6 +559,15 @@ export class SpecialistAgentOrchestrationService {
       );
       return;
     }
+    const queueRefusal = await this.queuedRunRefusalReason(job);
+    if (queueRefusal) {
+      await this.finishQueueAuthorizationRefusal(
+        job,
+        queueRefusal,
+        attemptNumber,
+      );
+      return;
+    }
 
     // The parent row is persisted before queue.add so a crash between those operations is
     // recoverable. Record actual worker pickup separately from that enqueue-side row creation,
@@ -704,8 +714,9 @@ export class SpecialistAgentOrchestrationService {
     );
   }
 
-  async cancelRun(businessId: string, runId: string, actorUserId?: string) {
+  async cancelRun(businessId: string, runId: string, actorUserId: string) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
+    await this.assertOwnerCanOperate(scopedBusinessId, actorUserId);
     const parent = await this.tenantPrisma.client.specialistAgentRun.findFirst({
       where: {
         id: runId,
@@ -814,6 +825,7 @@ export class SpecialistAgentOrchestrationService {
     idempotencyKey?: string,
   ) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
+    await this.assertOwnerCanOperate(scopedBusinessId, actorUserId);
     const key = idempotencyKey?.trim();
     if (!key) {
       throw new AppException(
@@ -1086,6 +1098,15 @@ export class SpecialistAgentOrchestrationService {
         ]);
         return;
       }
+      const queueRefusal = await this.queuedRunRefusalReason(job);
+      if (queueRefusal) {
+        await this.finishQueueAuthorizationRefusal(
+          job,
+          queueRefusal,
+          attemptNumber,
+        );
+        return;
+      }
       try {
         const childRun = await this.runChild(
           agent.agentKey,
@@ -1215,6 +1236,15 @@ export class SpecialistAgentOrchestrationService {
         await this.finishCancelled(parent.id, job.businessId, [
           ...childrenByAgent.values(),
         ]);
+        return;
+      }
+      const queueRefusal = await this.queuedRunRefusalReason(job);
+      if (queueRefusal) {
+        await this.finishQueueAuthorizationRefusal(
+          job,
+          queueRefusal,
+          attemptNumber,
+        );
         return;
       }
       try {
@@ -1653,6 +1683,100 @@ export class SpecialistAgentOrchestrationService {
         errorCode,
       },
     });
+  }
+
+  /**
+   * The HTTP route is owner-only, but a durable queue item can outlive that request's
+   * membership or business activation. Re-check both before every specialist starts reading data.
+   */
+  private async ownerAuthorizationRefusalReason(
+    businessId: string,
+    actorUserId: string | null | undefined,
+  ): Promise<string | null> {
+    if (!actorUserId) return 'SPECIALIST_ORCHESTRATION_ACTOR_MISSING';
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { parentId: true, active: true },
+    });
+    if (!business) return 'SPECIALIST_ORCHESTRATION_BUSINESS_NOT_FOUND';
+    if (!business.active) {
+      return 'SPECIALIST_ORCHESTRATION_BUSINESS_INACTIVE';
+    }
+    const businessIds = [
+      businessId,
+      ...(business.parentId ? [business.parentId] : []),
+    ];
+    const membership = await this.prisma.businessUser.findFirst({
+      where: {
+        userId: actorUserId,
+        businessId: { in: businessIds },
+        active: true,
+        role: 'owner',
+      },
+      select: { id: true },
+    });
+    return membership
+      ? null
+      : 'SPECIALIST_ORCHESTRATION_ACTOR_PERMISSION_REVOKED';
+  }
+
+  private queuedRunRefusalReason(job: SpecialistAgentOrchestrationJobData) {
+    return this.ownerAuthorizationRefusalReason(
+      job.businessId,
+      job.actorUserId,
+    );
+  }
+
+  private async assertOwnerCanOperate(
+    businessId: string,
+    actorUserId: string,
+  ) {
+    const refusal = await this.ownerAuthorizationRefusalReason(
+      businessId,
+      actorUserId,
+    );
+    if (!refusal) return;
+    if (refusal === 'SPECIALIST_ORCHESTRATION_BUSINESS_INACTIVE') {
+      throw new AppException(
+        refusal,
+        'Cross-agent reviews are unavailable while this business is inactive.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    if (refusal === 'SPECIALIST_ORCHESTRATION_BUSINESS_NOT_FOUND') {
+      throw new AppException(
+        refusal,
+        'The current business could not be found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    throw new AppException(
+      refusal,
+      'An active business owner is required to manage cross-agent reviews.',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  private async finishQueueAuthorizationRefusal(
+    job: SpecialistAgentOrchestrationJobData,
+    errorCode: string,
+    attemptNumber: number,
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        businessId: job.businessId,
+        actorUserId: job.actorUserId || null,
+        action: 'specialist_agent.orchestration.queue_authorization_denied',
+        entity: 'SpecialistAgentRun',
+        entityId: job.parentRunId,
+        after: {
+          denied: true,
+          mode: job.mode,
+          reasonCode: errorCode,
+        },
+      },
+    });
+    await this.finishQueueFailure(job, errorCode, attemptNumber);
   }
 
   private async runChild(

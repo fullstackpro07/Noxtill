@@ -8,6 +8,7 @@ import {
   SPECIALIST_AGENT_ORCHESTRATION_QUEUE,
 } from './specialist-agent-orchestration.constants';
 import { SpecialistAgentRetentionService } from './specialist-agent-retention.service';
+import { SpecialistAgentActionExpiryService } from './specialist-agent-action-expiry.service';
 import {
   SpecialistAgentOrchestrationJobData,
   SpecialistAgentOrchestrationService,
@@ -23,6 +24,7 @@ export class SpecialistAgentOrchestrationProcessor extends WorkerHost {
     private readonly cls: ClsService,
     private readonly orchestration: SpecialistAgentOrchestrationService,
     private readonly retention: SpecialistAgentRetentionService,
+    private readonly actionExpiry: SpecialistAgentActionExpiryService,
   ) {
     super();
   }
@@ -36,6 +38,10 @@ export class SpecialistAgentOrchestrationProcessor extends WorkerHost {
     }
     if (job.name === 'retention') {
       await this.retention.runDue();
+      return;
+    }
+    if (job.name === 'approval-expiry') {
+      await this.actionExpiry.runDue();
       return;
     }
     if (job.name !== 'run') return;

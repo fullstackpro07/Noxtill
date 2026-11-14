@@ -539,7 +539,7 @@ describe('CustomerIntelligenceService (MySQL)', () => {
       data: {
         businessId: otherBusinessId,
         agentKey: 'customer_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.1.0',
         moduleId: '7',
         status: 'completed',
       },
@@ -570,7 +570,7 @@ describe('CustomerIntelligenceService (MySQL)', () => {
       data: {
         businessId,
         agentKey: 'customer_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.1.0',
         moduleId: '7',
         status: 'running',
       },
@@ -722,7 +722,7 @@ describe('CustomerIntelligenceService (MySQL)', () => {
       data: {
         businessId,
         agentKey: 'customer_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.1.0',
         moduleId: '7',
         status: 'running',
       },
@@ -885,7 +885,7 @@ describe('CustomerIntelligenceService (MySQL)', () => {
       data: {
         businessId,
         agentKey: 'customer_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.1.0',
         moduleId: '7',
         status: 'running',
       },
@@ -1620,7 +1620,7 @@ describe('CustomerIntelligenceService (MySQL)', () => {
         data: {
           businessId,
           agentKey: 'customer_intelligence',
-          agentVersion: '1.0.0',
+          agentVersion: '1.1.0',
           moduleId: '7',
           triggerType: 'event',
           status: 'failed',
@@ -1789,7 +1789,7 @@ describe('CustomerIntelligenceService (MySQL)', () => {
         data: {
           businessId,
           agentKey: 'customer_intelligence',
-          agentVersion: '1.0.0',
+          agentVersion: '1.1.0',
           moduleId: '7',
           triggerType: 'event',
           status: 'failed',

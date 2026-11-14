@@ -88,11 +88,31 @@ function formatElapsedAge(milliseconds: number): string {
 
 function formatSpecialistRunEventName(eventName: string): string {
   const labels: Record<string, string> = {
+    "agent.run.created": "Run created",
+    "agent.run.started": "Run started",
+    "agent.run.completed": "Run completed",
+    "agent.run.partial": "Run partially completed",
+    "agent.run.failed": "Run failed",
+    "agent.run.cancel_requested": "Run cancellation requested",
+    "agent.run.cancelled": "Run cancelled",
+    "agent.run.skipped": "Run skipped",
+    "agent.run.retry_queued": "Run retry queued",
+    "agent.run.worker_started": "Queued run picked up by worker",
     "agent.run.child_started": "Specialist started",
     "agent.run.child_completed": "Specialist completed",
     "agent.run.child_partial": "Specialist partially completed",
     "agent.run.child_failed": "Specialist failed",
     "agent.run.child_skipped": "Specialist skipped",
+    "agent.action.awaiting_approval": "Action awaiting approval",
+    "agent.action.expired": "Action approval expired",
+    "agent.action.failed": "Action failed",
+    "agent.action.outcome_unknown": "Action outcome unknown · review required",
+    "agent.action.verification_outcome_unknown": "Verification outcome unknown · review required",
+    "agent.action.outcome_reconciled": "Unknown outcome review closed by owner",
+    "agent.action.verification_outcome_reconciled": "Unknown verification review closed by owner",
+    "agent.action.verified": "Action verified",
+    "agent.action.proposal_updated": "Action proposal updated",
+    "agent.action.state_changed": "Action state changed",
     "agent.tool.started": "Tool started",
     "agent.tool.succeeded": "Tool succeeded",
     "agent.tool.refused": "Tool refused",
@@ -263,7 +283,7 @@ export function AiSettingsView({ currency }: { currency: string }) {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "The cross-agent review could not be stopped."),
   });
   const specialistActionDecisionMutation = useMutation({
-    mutationFn: ({ actionId, operation, reason, expectedVersion }: { actionId: string; operation: "approve" | "reject" | "execute" | "cancel" | "source-rfq"; reason?: string; expectedVersion?: number }) =>
+    mutationFn: ({ actionId, operation, reason, expectedVersion }: { actionId: string; operation: "approve" | "reject" | "execute" | "cancel" | "source-rfq" | "resolve"; reason?: string; expectedVersion?: number }) =>
       decideSpecialistAgentAction(actionId, operation, { ...(reason ? { reason } : {}), ...(expectedVersion !== undefined ? { expectedVersion } : {}) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["specialist-agent-action-audit"] });
@@ -448,6 +468,10 @@ export function AiSettingsView({ currency }: { currency: string }) {
                 { label: "Linked AI attempts", value: visibleOperationAgents.reduce((sum, agent) => sum + agent.aiUsage.calls, 0) },
                 { label: "App-estimated AI cost", value: formatCurrency(visibleOperationAgents.reduce((sum, agent) => sum + agent.aiUsage.estimatedCostUsd, 0), currency) },
                 { label: "Audited cross-tenant run probes · business-wide", value: specialistOperations.securityEvents.auditedCrossTenantRunProbeDenials },
+                { label: "Stopped queued runs after owner access changes · business-wide", value: specialistOperations.securityEvents.auditedOrchestrationAuthorizationDenials },
+                { label: "Stopped tool calls after initiating-user access changes · business-wide", value: specialistOperations.securityEvents.auditedAgentToolAuthorizationDenials },
+                { label: "Audited cross-business action probes · business-wide", value: specialistOperations.securityEvents.auditedActionCrossTenantProbeDenials },
+                { label: "Agent/source-module policy refusals · business-wide", value: specialistOperations.securityEvents.auditedActionPolicyDenials },
                 { label: "Audited Commerce tool blocks · business-wide", value: specialistOperations.securityEvents.auditedCommerceToolCallBlocks },
                 { label: "Persisted registered tool refusals · 30 days", value: specialistOperations.securityEvents.persistedToolCallRefusals },
                 { label: "Audited Commerce approval refusals · business-wide", value: specialistOperations.securityEvents.auditedCommerceApprovalRefusals },
@@ -676,7 +700,7 @@ export function AiSettingsView({ currency }: { currency: string }) {
                         .map(([state, count]) => `${state.replaceAll("_", " ")} ${count}`)
                         .join(" · ") || "No material actions"}</div>
                       <div style={{ marginTop: 3, color: "#667085" }}>
-                        Proposal revisions: {agent.proposalRevisionCount} · Approval events: {agent.approvalDecisions.approved} approved / {agent.approvalDecisions.rejected} rejected · rejection share {agent.approvalDecisions.rejectedSharePercent === null ? "not available" : `${agent.approvalDecisions.rejectedSharePercent}%`} of {agent.approvalDecisions.decisionEvents} decision events · Verification: {agent.verificationOutcomes.verified} verified / {agent.verificationOutcomes.failed} failed · failure share {agent.verificationOutcomes.failedSharePercent === null ? "not available" : `${agent.verificationOutcomes.failedSharePercent}%`} of {agent.verificationOutcomes.verificationEvents} verification events · {agent.actionExecutionAttempts} execution attempts
+                        Proposal revisions: {agent.proposalRevisionCount} · Approval events: {agent.approvalDecisions.approved} approved / {agent.approvalDecisions.rejected} rejected · rejection share {agent.approvalDecisions.rejectedSharePercent === null ? "not available" : `${agent.approvalDecisions.rejectedSharePercent}%`} of {agent.approvalDecisions.decisionEvents} decision events · Verification: {agent.verificationOutcomes.verified} verified / {agent.verificationOutcomes.failed} failed / {agent.verificationOutcomes.unknown} currently open · failure share {agent.verificationOutcomes.failedSharePercent === null ? "not available" : `${agent.verificationOutcomes.failedSharePercent}%`} of {agent.verificationOutcomes.verificationEvents} verification events · {agent.actionExecutionAttempts} execution attempts
                       </div>
                       <div style={{ marginTop: 3, color: "#667085" }}>
                         Action execution time: {agent.actionExecutionLatency.sampleCount
@@ -804,43 +828,46 @@ export function AiSettingsView({ currency }: { currency: string }) {
                       </tr></thead>
                       <tbody>{specialistActionAudit.actions.map((action) => {
                         const actionAgent = specialistOperations?.agents.find((agent) => agent.agentKey === action.agentKey);
+                        const approvalExpired = action.state === "approval_required" && action.approvalExpiresAt !== null && Date.parse(action.approvalExpiresAt) <= Date.now();
                         return (
                           <Fragment key={action.id}>
                             <tr style={{ borderTop: "1px solid #F2F4F7" }}>
                               <td style={{ padding: "10px 17px", fontSize: 10.5, color: "#475467", whiteSpace: "nowrap" }}>{new Date(action.createdAt).toLocaleString()}</td>
                               <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}><strong>{actionAgent?.name ?? action.agentKey}</strong><div>{action.actionType.replaceAll("_", " ")}</div><div style={{ color: "#667085" }}>Proposal version: {action.expectedVersion ?? "not recorded"}</div><div style={{ color: "#98A2B3" }}>Action {action.id}</div></td>
-                              <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}>{action.canonicalResourceType}<div style={{ color: "#667085" }}>{action.canonicalResourceId}</div>{action.canonicalOperationId ? <div style={{ color: "#667085" }}>Operation {action.canonicalOperationId}</div> : null}</td>
-                              <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}>{action.state}<div style={{ color: "#667085" }}>Risk: {action.riskTier}</div>{action.errorCode ? <div style={{ color: "#B42318" }}>{action.errorCode}</div> : null}</td>
+                              <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}>{action.detailsRedacted ? <span role="status">{action.detailsRedactionMessage ?? "Source details are hidden by module selection."}</span> : <>{action.canonicalResourceType}<div style={{ color: "#667085" }}>{action.canonicalResourceId}</div>{action.canonicalOperationId ? <div style={{ color: "#667085" }}>Operation {action.canonicalOperationId}</div> : null}</>}</td>
+                              <td style={{ padding: 8, fontSize: 10.5, color: "#344054" }}>{approvalExpired ? "expired" : action.state}<div style={{ color: "#667085" }}>Risk: {action.riskTier}</div>{action.errorCode ? <div style={{ color: "#B42318" }}>{action.errorCode}</div> : null}</td>
                               <td style={{ padding: 8, fontSize: 10.5, color: "#475467" }}>
-                                Required: {action.requiredApproval ? action.requiredApproverRole ?? "yes" : "no"}<div>Approved: {action.approvedByUserId ?? "not recorded"}</div><div>Executed: {action.executedByUserId ?? "not recorded"}</div><div>Attempts: {action.executionAttemptCount}</div>
-                                {action.actionType === "inventory_reorder_request" && action.state === "approval_required" ? (
+                                Required: {action.requiredApproval ? action.requiredApproverRole ?? "yes" : "no"}<div>Approval expires: {action.approvalExpiresAt ? new Date(action.approvalExpiresAt).toLocaleString() : "not required"}</div><div>Approved: {action.approvedByUserId ?? "not recorded"}</div><div>Executed: {action.executedByUserId ?? "not recorded"}</div><div>Attempts: {action.executionAttemptCount}</div>
+                                {!approvalExpired && action.actionType === "inventory_reorder_request" && action.state === "approval_required" ? (
                                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
-                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={() => specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "approve", expectedVersion: action.expectedVersion ?? undefined })} style={outlineBtnStyle}>Approve</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null || action.detailsRedacted} onClick={() => specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "approve", expectedVersion: action.expectedVersion ?? undefined })} style={outlineBtnStyle}>Approve</button>
                                     <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Reject inventory reorder", description: "This records the reason in the canonical Procurement review.", placeholder: "Reason for rejection", minLength: 1, confirmLabel: "Reject", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "reject", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Reject</button>
                                     <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel inventory reorder", description: "The submitted Procurement request will be withdrawn and the reason audited.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel request", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel</button>
                                   </div>
                                 ) : action.actionType === "inventory_reorder_request" && action.state === "approved" ? (
                                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
-                                    {!action.canonicalOperationId ? <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel approved reorder", description: "Cancel this Procurement request before a purchase order or sourcing RFQ is created. The reason will be audited.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel request", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel request</button> : null}
-                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const confirmed = await askConfirm({ title: "Create purchase order", description: "This delegates to Procurement using the approved proposal version. The request must have a supplier and valid stock items.", confirmLabel: "Create purchase order" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create purchase order</button>
-                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const confirmed = await askConfirm({ title: "Create shared sourcing RFQ", description: "This creates a draft in the existing Commerce RFQ system and verifies its link to this approved Procurement request. It does not contact suppliers or create a purchase order.", confirmLabel: "Create draft RFQ" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "source-rfq", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create shared RFQ</button>
+                                    {!action.detailsRedacted && !action.canonicalOperationId ? <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel approved reorder", description: "Cancel this Procurement request before a purchase order or sourcing RFQ is created. The reason will be audited.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel request", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel request</button> : null}
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null || action.detailsRedacted} onClick={async () => { const confirmed = await askConfirm({ title: "Create purchase order", description: "This delegates to Procurement using the approved proposal version. The request must have a supplier and valid stock items.", confirmLabel: "Create purchase order" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create purchase order</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null || action.detailsRedacted} onClick={async () => { const confirmed = await askConfirm({ title: "Create shared sourcing RFQ", description: "This creates a draft in the existing Commerce RFQ system and verifies its link to this approved Procurement request. It does not contact suppliers or create a purchase order.", confirmLabel: "Create draft RFQ" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "source-rfq", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create shared RFQ</button>
                                   </div>
-                                ) : action.actionType === "customer_follow_up_task" && action.state === "approval_required" ? (
+                                ) : !approvalExpired && action.actionType === "customer_follow_up_task" && action.state === "approval_required" ? (
                                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
-                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={() => specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "approve", expectedVersion: action.expectedVersion ?? undefined })} style={outlineBtnStyle}>Approve internal task</button>
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null || action.detailsRedacted} onClick={() => specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "approve", expectedVersion: action.expectedVersion ?? undefined })} style={outlineBtnStyle}>Approve internal task</button>
                                     <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Reject follow-up task", description: "Record why this internal CRM task should not be created.", placeholder: "Reason for rejection", minLength: 1, confirmLabel: "Reject", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "reject", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Reject</button>
                                     <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel follow-up proposal", description: "Record why this pending internal task proposal is being cancelled.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel proposal", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel</button>
                                   </div>
                                 ) : action.actionType === "customer_follow_up_task" && action.state === "approved" ? (
                                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
-                                    {!action.canonicalOperationId ? <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel approved follow-up", description: "Cancel this internal CRM task before execution starts. The reason will be audited.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel task", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel task</button> : null}
-                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const confirmed = await askConfirm({ title: "Create the CRM follow-up task?", description: "This creates one internal task through Customers. It does not draft or send a customer message.", confirmLabel: "Create internal task" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create internal task</button>
+                                    {!action.detailsRedacted && !action.canonicalOperationId ? <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const reason = await askText({ title: "Cancel approved follow-up", description: "Cancel this internal CRM task before execution starts. The reason will be audited.", placeholder: "Reason for cancellation", minLength: 1, confirmLabel: "Cancel task", tone: "danger" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "cancel", reason, expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Cancel task</button> : null}
+                                    <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null || action.detailsRedacted} onClick={async () => { const confirmed = await askConfirm({ title: "Create the CRM follow-up task?", description: "This creates one internal task through Customers. It does not draft or send a customer message.", confirmLabel: "Create internal task" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={outlineBtnStyle}>Create internal task</button>
                                   </div>
                                 ) : action.actionType === "customer_follow_up_task" && action.state === "failed" ? (
-                                  <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null} onClick={async () => { const confirmed = await askConfirm({ title: "Retry CRM task creation?", description: "The Customers service uses an idempotency key, so a retry after a lost response will return the same task instead of creating a duplicate.", confirmLabel: "Retry task creation" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={{ ...outlineBtnStyle, marginTop: 7 }}>Retry task creation</button>
+                                  <button type="button" disabled={specialistActionDecisionMutation.isPending || action.expectedVersion === null || action.detailsRedacted} onClick={async () => { const confirmed = await askConfirm({ title: "Retry CRM task creation?", description: "The Customers service uses an idempotency key, so a retry after a lost response will return the same task instead of creating a duplicate.", confirmLabel: "Retry task creation" }); if (confirmed) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "execute", expectedVersion: action.expectedVersion ?? undefined }); }} style={{ ...outlineBtnStyle, marginTop: 7 }}>Retry task creation</button>
+                                ) : action.state === "needs_review" && (action.errorCode === "SPECIALIST_ACTION_OUTCOME_UNKNOWN" || action.errorCode === "SPECIALIST_ACTION_VERIFICATION_OUTCOME_UNKNOWN") ? (
+                                  <button type="button" disabled={specialistActionDecisionMutation.isPending} onClick={async () => { const verificationUnknown = action.errorCode === "SPECIALIST_ACTION_VERIFICATION_OUTCOME_UNKNOWN"; const reason = await askText({ title: verificationUnknown ? "Close unknown-verification review" : "Close unknown-outcome review", description: verificationUnknown ? "Check the canonical resource first. Closing this review does not mark the action verified or provider-confirmed. Record what you found." : "Check the canonical resource first. Closing this review does not mark the action successful or provider-confirmed. Record what you found.", placeholder: "What did you find in the canonical resource?", minLength: 1, confirmLabel: "Close review" }); if (reason) specialistActionDecisionMutation.mutate({ actionId: action.id, operation: "resolve", reason }); }} style={outlineBtnStyle}>Close review</button>
                                 ) : null}
                               </td>
-                              <td style={{ padding: "10px 17px", fontSize: 10.5, color: "#475467" }}><details><summary style={{ cursor: "pointer" }}>View {action.events.length} saved event(s)</summary><div style={{ marginTop: 7, maxWidth: 440 }}><div>{action.reason}</div><div style={{ color: "#667085", marginTop: 4 }}>Correlation {action.correlationId}</div><ol style={{ paddingLeft: 20, margin: "8px 0" }}>{action.events.map((event) => <li key={`${action.id}:${event.sequence}`} style={{ paddingBottom: 6 }}><strong>{event.fromState ?? "created"} → {event.toState ?? event.eventType}</strong><div>{event.eventType} · {new Date(event.createdAt).toLocaleString()}</div>{event.actorUserId ? <div>Actor {event.actorUserId}</div> : null}{event.reason ? <div>{event.reason}</div> : null}</li>)}</ol></div></details></td>
+                              <td style={{ padding: "10px 17px", fontSize: 10.5, color: "#475467" }}>{action.detailsRedacted ? "Action timeline hidden by module selection." : <details><summary style={{ cursor: "pointer" }}>View {action.events.length} saved event(s)</summary><div style={{ marginTop: 7, maxWidth: 440 }}><div>{action.reason}</div><div style={{ color: "#667085", marginTop: 4 }}>Correlation {action.correlationId}</div><ol style={{ paddingLeft: 20, margin: "8px 0" }}>{action.events.map((event) => <li key={`${action.id}:${event.sequence}`} style={{ paddingBottom: 6 }}><strong>{event.fromState ?? "created"} → {event.toState ?? event.eventType}</strong><div>{event.eventType} · {new Date(event.createdAt).toLocaleString()}</div>{event.actorUserId ? <div>Actor {event.actorUserId}</div> : null}{event.reason ? <div>{event.reason}</div> : null}</li>)}</ol></div></details>}</td>
                             </tr>
                           </Fragment>
                         );
@@ -940,16 +967,18 @@ export function AiSettingsView({ currency }: { currency: string }) {
                       <td style={{ padding: 9, fontSize: 11, color: "#344054" }}><strong>{agent?.name ?? run.agentKey}</strong><div style={{ color: "#98A2B3" }}>Module {run.moduleId}</div></td>
                       <td style={{ padding: 9, fontSize: 10.5, color: "#475467" }}>{run.triggerType.replaceAll("_", " ")}<div style={{ color: "#667085" }}>Code {run.agentVersion}</div><div style={{ color: "#667085" }}>Config {run.agentConfigVersion === null ? "not pinned" : `v${run.agentConfigVersion}`}</div></td>
                       <td style={{ padding: 9, fontSize: 10.5, color: run.status === "failed" ? "#B42318" : "#344054" }}>{run.status.replaceAll("_", " ")}{run.errorCode ? <div style={{ color: "#B42318" }}>{run.errorCode}</div> : null}{run.detailsExpired ? <div style={{ color: "#667085" }}>Transient details expired by retention policy</div> : null}</td>
-                      <td style={{ padding: "10px 17px", textAlign: "right", fontSize: 10.5, color: "#475467" }}>{run.relatedCounts.recommendations} · {run.relatedCounts.evidence} · {run.relatedCounts.actions}</td>
+                      <td style={{ padding: "10px 17px", textAlign: "right", fontSize: 10.5, color: "#475467" }}>{run.detailsRedacted ? "Details hidden by module selection" : `${run.relatedCounts.recommendations} · ${run.relatedCounts.evidence} · ${run.relatedCounts.actions}`}</td>
                       <td style={{ padding: "8px 17px", textAlign: "right" }}>
                         <button
                           type="button"
                           aria-expanded={selectedRunToolCallsId === run.id}
                           aria-controls={`specialist-run-tool-calls-${run.id}`}
                           onClick={() => setSelectedRunToolCallsId((current) => current === run.id ? null : run.id)}
+                          disabled={run.detailsRedacted}
+                          title={run.detailsRedactionMessage}
                           style={outlineBtnStyle}
                         >
-                          {selectedRunToolCallsId === run.id ? "Hide calls" : `View ${run.relatedCounts.toolCalls} calls`}
+                          {run.detailsRedacted ? "Details hidden" : selectedRunToolCallsId === run.id ? "Hide calls" : `View ${run.relatedCounts.toolCalls} calls`}
                         </button>
                       </td>
                       <td style={{ padding: "8px 17px", textAlign: "right" }}>
@@ -958,9 +987,11 @@ export function AiSettingsView({ currency }: { currency: string }) {
                           aria-expanded={selectedRunEvidenceId === run.id}
                           aria-controls={`specialist-run-evidence-${run.id}`}
                           onClick={() => setSelectedRunEvidenceId((current) => current === run.id ? null : run.id)}
+                          disabled={run.detailsRedacted}
+                          title={run.detailsRedactionMessage}
                           style={outlineBtnStyle}
                         >
-                          {selectedRunEvidenceId === run.id ? "Hide sources" : "View sources"}
+                          {run.detailsRedacted ? "Details hidden" : selectedRunEvidenceId === run.id ? "Hide sources" : "View sources"}
                         </button>
                       </td>
                       <td style={{ padding: "8px 17px", textAlign: "right" }}>
@@ -969,9 +1000,11 @@ export function AiSettingsView({ currency }: { currency: string }) {
                           aria-expanded={selectedRunEventsId === run.id}
                           aria-controls={`specialist-run-events-${run.id}`}
                           onClick={() => setSelectedRunEventsId((current) => current === run.id ? null : run.id)}
+                          disabled={run.detailsRedacted}
+                          title={run.detailsRedactionMessage}
                           style={outlineBtnStyle}
                         >
-                          {selectedRunEventsId === run.id ? "Hide events" : "View events"}
+                          {run.detailsRedacted ? "Details hidden" : selectedRunEventsId === run.id ? "Hide events" : "View events"}
                         </button>
                       </td>
                     </tr>
@@ -984,6 +1017,8 @@ export function AiSettingsView({ currency }: { currency: string }) {
                           </div>
                           {selectedRunToolCallsPending ? <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>Loading tool-call records…</div> : selectedRunToolCallsError || !selectedRunToolCalls ? (
                             <div role="alert" style={{ fontSize: 10.5, color: "#B42318" }}>Tool-call records could not be loaded.</div>
+                          ) : selectedRunToolCalls.detailsRedacted ? (
+                            <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>{selectedRunToolCalls.detailsRedactionMessage}</div>
                           ) : selectedRunToolCalls.items.length ? (
                             <div style={{ display: "grid", gap: 7 }}>
                               {selectedRunToolCalls.items.map((call) => (
@@ -1008,6 +1043,8 @@ export function AiSettingsView({ currency }: { currency: string }) {
                           </div>
                           {selectedRunEvidencePending ? <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>Loading evidence references…</div> : selectedRunEvidenceError || !selectedRunEvidence ? (
                             <div role="alert" style={{ fontSize: 10.5, color: "#B42318" }}>Evidence references could not be loaded.</div>
+                          ) : selectedRunEvidence.detailsRedacted ? (
+                            <div role="status" style={{ fontSize: 10.5, color: "#667085" }}>{selectedRunEvidence.detailsRedactionMessage}</div>
                           ) : selectedRunEvidence.items.length ? (
                             <div style={{ display: "grid", gap: 7 }}>
                               {selectedRunEvidence.items.map((evidence) => (
@@ -1036,6 +1073,9 @@ export function AiSettingsView({ currency }: { currency: string }) {
                             <div role="alert" style={{ fontSize: 10.5, color: "#B42318" }}>Run lifecycle events could not be loaded.</div>
                           ) : (
                             <>
+                              {selectedRunEvents.detailsRedacted ? (
+                                <div role="status" style={{ marginBottom: 8, fontSize: 10.5, color: "#667085" }}>{selectedRunEvents.detailsRedactionMessage}</div>
+                              ) : null}
                               <div style={{ display: "grid", gap: 7 }}>
                                 {[...(loadedOlderRunEvents[run.id]?.items ?? []), ...selectedRunEvents.items].map((event) => (
                                   <div key={event.eventId} style={{ display: "grid", gridTemplateColumns: "minmax(130px, .8fr) minmax(140px, 1fr) minmax(0, 1.2fr)", gap: 8, border: `1px solid ${AI.border}`, borderRadius: 8, background: "#fff", padding: 9, fontSize: 10.5, color: "#475467" }}>

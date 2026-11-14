@@ -1030,6 +1030,7 @@ model Business {
   seoGuestPostingAudits            SeoGuestPostingAudit[]
   seoCompetitorGaps                SeoCompetitorGap[]
   seoCompetitorGapAudits           SeoCompetitorGapAudit[]
+  seoOutcomeSnapshots              SeoOutcomeSnapshot[]
   contentItems                     ContentItem[]
   staffShifts                      StaffShift[]
   timeOff                          TimeOff[]
@@ -9357,6 +9358,37 @@ model SeoContentBriefAudit {
   @@map("seo_content_brief_audits")
 }
 
+/// Immutable, deduplicated rank observations captured after a merchant-recorded SEO action.
+/// Rank movement is descriptive only and is not evidence that the action caused the change.
+model SeoOutcomeSnapshot {
+  id                 String    @id @default(uuid())
+  businessId         String    @map("business_id")
+  business           Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  actionType         String    @map("action_type") @db.VarChar(32)
+  actionId           String    @map("action_id") @db.VarChar(191)
+  actionLabel        String    @map("action_label") @db.VarChar(300)
+  keyword            String?   @db.VarChar(191)
+  targetUrl          String?   @map("target_url") @db.VarChar(2048)
+  appliedAt          DateTime  @map("applied_at")
+  baselineRank       Int?      @map("baseline_rank")
+  baselineCapturedAt DateTime? @map("baseline_captured_at")
+  measuredRank       Int?      @map("measured_rank")
+  measuredAt         DateTime  @map("measured_at")
+  rankChange         Int?      @map("rank_change")
+  outcomeState       String    @map("outcome_state") @db.VarChar(40)
+  rankSource         String    @map("rank_source") @db.VarChar(80)
+  crawlVerifiedAt    DateTime? @map("crawl_verified_at")
+  caveat             String    @db.Text
+  observationKey     String    @map("observation_key") @db.Char(64)
+  createdByUserId    String?   @map("created_by_user_id") @db.VarChar(191)
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@unique([businessId, observationKey], map: "seo_outcome_snapshots_business_observation_uq")
+  @@index([businessId, actionType, actionId, measuredAt], map: "seo_outcome_snapshots_business_action_measured_idx")
+  @@index([businessId, createdAt], map: "seo_outcome_snapshots_business_created_idx")
+  @@map("seo_outcome_snapshots")
+}
+
 /// A dismissed content opportunity (keyword + kind), with the reason. Re-opened by deleting it.
 model SeoContentDismissal {
   id          String   @id @default(uuid())
@@ -10348,6 +10380,7 @@ model SpecialistAgentAction {
   createdAt                DateTime                        @default(now()) @map("created_at")
   updatedAt                DateTime                        @updatedAt @map("updated_at")
   approvedAt               DateTime?                       @map("approved_at")
+  approvalExpiresAt        DateTime?                       @map("approval_expires_at") @db.DateTime(3)
   executedAt               DateTime?                       @map("executed_at")
   verifiedAt               DateTime?                       @map("verified_at")
   closedAt                 DateTime?                       @map("closed_at")
@@ -10355,6 +10388,7 @@ model SpecialistAgentAction {
 
   @@unique([businessId, idempotencyKeyHash], map: "specialist_agent_actions_business_idempotency_uq")
   @@index([businessId, state, createdAt], map: "specialist_agent_actions_business_state_created_idx")
+  @@index([state, approvalExpiresAt], map: "specialist_agent_actions_state_expiry_idx")
   @@index([businessId, agentKey, createdAt], map: "specialist_agent_actions_business_agent_created_idx")
   @@index([businessId, canonicalResourceType, canonicalResourceId], map: "specialist_agent_actions_resource_idx")
   @@index([runId, createdAt], map: "specialist_agent_actions_run_created_idx")

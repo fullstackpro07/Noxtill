@@ -174,6 +174,7 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'SeoGuestPostingAudit',
   'SeoCompetitorGap',
   'SeoCompetitorGapAudit',
+  'SeoOutcomeSnapshot',
   'SeoAuditRun',
   'SeoSearchConsoleSnapshot',
   'SeoSearchConsoleKeywordSnapshot',

@@ -11,6 +11,7 @@ import {
   COMMERCE_EXPERIMENT_DECISION_EVENT_JOB,
   COMMERCE_DELIVERY_FAILED_EVENT_JOB,
   COMMERCE_RECONCILIATION_EVENT_JOB,
+  COMMERCE_PRODUCTION_WORK_ORDER_COMPLETED_EVENT_JOB,
   COMMERCE_RFQ_QUOTE_EVENT_JOB,
   COMMERCE_VALIDATION_EVENT_JOB,
   SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE,
@@ -21,6 +22,12 @@ import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-
 type CommerceValidationEvent = {
   businessId: string;
   activityEventId: string;
+};
+
+type CommerceProductionWorkOrderEvent = {
+  businessId: string;
+  workOrderId: string;
+  completedAt: string;
 };
 
 @Processor(SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE)
@@ -42,6 +49,9 @@ export class CommerceAgentEventProcessor extends WorkerHost {
     }
     if (job.name === COMMERCE_RECONCILIATION_EVENT_JOB) {
       return this.processReconciliation(job.data, attemptsMade);
+    }
+    if (job.name === COMMERCE_PRODUCTION_WORK_ORDER_COMPLETED_EVENT_JOB) {
+      return this.processProductionWorkOrder(job.data, attemptsMade);
     }
     if (job.name === COMMERCE_RFQ_QUOTE_EVENT_JOB) {
       return this.processRecordedQuote(job.data, attemptsMade);
@@ -133,6 +143,97 @@ export class CommerceAgentEventProcessor extends WorkerHost {
         }),
       });
     });
+  }
+
+  private async processProductionWorkOrder(
+    value: unknown,
+    attemptsMade: number,
+  ): Promise<void> {
+    const event = this.parseProductionWorkOrderEvent(value);
+    const business = await this.prisma.business.findUnique({
+      where: { id: event.businessId },
+      select: { id: true, active: true, policies: true },
+    });
+    if (!business?.active) return;
+    if (
+      !(await this.agentPolicy.isModuleEnabledForBusiness(
+        event.businessId,
+        'commerce',
+      ))
+    ) {
+      return;
+    }
+    const policies = resolvePolicies(business);
+    if (
+      !policies.bool('agents.commerceEnabled') ||
+      !policies.bool('agents.commerceProductionEventReviewEnabled') ||
+      (policies.num('commerce.autonomyLevel') ?? 0) <= 0
+    ) {
+      return;
+    }
+
+    const completedAt = new Date(event.completedAt);
+    if (!Number.isFinite(completedAt.getTime())) return;
+    const workOrder = await this.prisma.commerceWorkOrder.findFirst({
+      where: {
+        id: event.workOrderId,
+        businessId: event.businessId,
+        status: 'completed',
+        updatedAt: completedAt,
+      },
+      select: { id: true, updatedAt: true },
+    });
+    if (!workOrder) return;
+
+    const eventId = `commerce-production-work-order:${workOrder.id}:${workOrder.updatedAt.toISOString()}`;
+    const attempt = await resolveSpecialistAgentEventAttempt(this.prisma, {
+      businessId: event.businessId,
+      agentKey: 'autonomous_commerce',
+      baseIdempotencyKey: `${eventId}:${event.businessId}`,
+      attemptsMade,
+    });
+    if (!attempt.shouldRun) return;
+
+    await this.cls.run(async () => {
+      this.cls.set(CLS_KEY_BUSINESS_ID, event.businessId);
+      await this.agent.run(event.businessId, null, attempt.idempotencyKey, {
+        triggerType: 'event',
+        includeAiSummary: false,
+        triggerRef: createSpecialistAgentTriggerRef({
+          eventId,
+          sourceModule: 'autonomous_commerce',
+          entityType: 'CommerceWorkOrder',
+          entityId: workOrder.id,
+          occurredAt: workOrder.updatedAt,
+          entityVersion: `completed:${workOrder.updatedAt.toISOString()}`,
+        }),
+      });
+    });
+  }
+
+  private parseProductionWorkOrderEvent(
+    value: unknown,
+  ): CommerceProductionWorkOrderEvent {
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      !('businessId' in value) ||
+      !('workOrderId' in value) ||
+      !('completedAt' in value) ||
+      typeof value.businessId !== 'string' ||
+      !value.businessId.trim() ||
+      typeof value.workOrderId !== 'string' ||
+      !value.workOrderId.trim() ||
+      typeof value.completedAt !== 'string' ||
+      !Number.isFinite(new Date(value.completedAt).getTime())
+    ) {
+      throw new Error('Invalid Commerce production work-order event payload');
+    }
+    return {
+      businessId: value.businessId,
+      workOrderId: value.workOrderId,
+      completedAt: new Date(value.completedAt).toISOString(),
+    };
   }
 
   private async processExperimentDecision(

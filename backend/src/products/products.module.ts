@@ -14,9 +14,10 @@ import { PricingController } from './pricing.controller';
 import { CategoriesController } from './categories.controller';
 import { ActivityModule } from '../activity/activity.module';
 import { AiModule } from '../ai/ai.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
-  imports: [ActivityModule, AiModule],
+  imports: [ActivityModule, AiModule, SpecialistAgentEventQueueModule],
   // BundlesController (`/products/bundle`) and PricingController (`/products/bulk-price`) are
   // registered BEFORE ProductsController on purpose: Express/Nest resolve routes in registration
   // order, and ProductsController's `:id` params (`GET/PATCH /products/:id`) would otherwise

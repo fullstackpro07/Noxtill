@@ -10,6 +10,7 @@ import { resolveSpecialistAgentEventAttempt } from '../common/agents/specialist-
 import {
   INVENTORY_LOW_STOCK_EVENT_JOB,
   INVENTORY_PURCHASE_ORDER_RECEIVED_EVENT_JOB,
+  INVENTORY_PURCHASE_MOVEMENT_RECORDED_EVENT_JOB,
   INVENTORY_STOCK_COUNT_APPLIED_EVENT_JOB,
   INVENTORY_STOCK_TRANSFER_RECEIVED_EVENT_JOB,
   INVENTORY_WASTAGE_RECORDED_EVENT_JOB,
@@ -43,6 +44,12 @@ type InventoryStockTransferReceivedEvent = {
 };
 
 type InventoryWastageRecordedEvent = {
+  businessId: string;
+  stockMovementId: string;
+  occurredAt: string;
+};
+
+type InventoryPurchaseMovementRecordedEvent = {
   businessId: string;
   stockMovementId: string;
   occurredAt: string;
@@ -87,7 +94,57 @@ export class InventoryAgentEventProcessor extends WorkerHost {
         this.parseWastageRecordedEvent(job.data),
         attemptsMade,
       );
+    } else if (job.name === INVENTORY_PURCHASE_MOVEMENT_RECORDED_EVENT_JOB) {
+      await this.processPurchaseMovementRecordedEvent(
+        this.parsePurchaseMovementRecordedEvent(job.data),
+        attemptsMade,
+      );
     }
+  }
+
+  private async processPurchaseMovementRecordedEvent(
+    event: InventoryPurchaseMovementRecordedEvent,
+    attemptsMade: number,
+  ): Promise<void> {
+    const business = await this.prisma.business.findUnique({
+      where: { id: event.businessId },
+      select: { id: true, active: true, policies: true },
+    });
+    if (!business?.active) return;
+    if (
+      !(await this.agentPolicy.isModuleEnabled(event.businessId, 'inventory'))
+    ) {
+      return;
+    }
+
+    const policies = resolvePolicies(business);
+    if (
+      !policies.bool('agents.inventoryEnabled') ||
+      !policies.bool('agents.inventoryPurchaseMovementEventReviewEnabled')
+    ) {
+      return;
+    }
+
+    const movement = await this.prisma.stockMovement.findFirst({
+      where: {
+        id: event.stockMovementId,
+        businessId: event.businessId,
+        kind: 'purchase',
+        createdAt: new Date(event.occurredAt),
+      },
+      select: { id: true, createdAt: true },
+    });
+    if (!movement) return;
+
+    await this.runOnceForEvent(
+      event.businessId,
+      `inventory-purchase-movement:${movement.id}`,
+      'StockMovement',
+      movement.id,
+      movement.createdAt,
+      movement.createdAt.toISOString(),
+      attemptsMade,
+    );
   }
 
   private async processLowStockEvent(
@@ -497,6 +554,33 @@ export class InventoryAgentEventProcessor extends WorkerHost {
     ) {
       throw new Error(
         'Invalid Inventory wastage-recorded specialist event payload',
+      );
+    }
+    return {
+      businessId: value.businessId,
+      stockMovementId: value.stockMovementId,
+      occurredAt: new Date(value.occurredAt).toISOString(),
+    };
+  }
+
+  private parsePurchaseMovementRecordedEvent(
+    value: unknown,
+  ): InventoryPurchaseMovementRecordedEvent {
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      !('businessId' in value) ||
+      !('stockMovementId' in value) ||
+      !('occurredAt' in value) ||
+      typeof value.businessId !== 'string' ||
+      !value.businessId.trim() ||
+      typeof value.stockMovementId !== 'string' ||
+      !value.stockMovementId.trim() ||
+      typeof value.occurredAt !== 'string' ||
+      !Number.isFinite(new Date(value.occurredAt).getTime())
+    ) {
+      throw new Error(
+        'Invalid Inventory purchase-movement specialist event payload',
       );
     }
     return {

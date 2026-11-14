@@ -9,7 +9,11 @@ import {
 import { AiInfraService } from '../ai/ai-infra.service';
 import { describeAiProviderFailure } from '../ai/ai-provider-error.util';
 import { AppException } from '../common/filters/app.exception';
-import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
+import {
+  isSpecialistSourceModuleDisabledError,
+  SpecialistAgentPolicyService,
+} from '../common/agents/specialist-agent-policy.service';
+import { hasRequiredSpecialistAgentAnswerSections } from '../common/agents/specialist-agent-answer.util';
 import {
   SPECIALIST_AGENT_UNTRUSTED_DATA_POLICY,
   specialistAgentUntrustedData,
@@ -20,10 +24,12 @@ import {
 } from '../common/agents/specialist-agent-run-idempotency.util';
 import {
   recordSpecialistAgentRunCreatedEvent,
+  recordSpecialistAgentRunStartedEvent,
   recordSpecialistAgentRunTerminalEvent,
   type SpecialistAgentTerminalStatus,
 } from '../common/agents/specialist-agent-run-events.util';
 import { ensureSpecialistAgentConfigVersion } from '../common/agents/specialist-agent-config.util';
+import { specialistAgentRunDetailsHiddenByModuleSelection } from '../common/agents/specialist-agent-module-selection.util';
 import {
   createSpecialistAgentParentRunRef,
   type SpecialistAgentRunOptions,
@@ -46,7 +52,7 @@ import { CommerceProductionService } from './commerce-production.service';
 import type { AnthropicContentBlock } from '../ai/claude.client';
 
 const AGENT_KEY = 'autonomous_commerce';
-const AGENT_VERSION = '1.0.0';
+const AGENT_VERSION = '1.1.0';
 const MAX_COMMERCE_QUESTION_LENGTH = 1_000;
 const MAX_COMMERCE_READ_TOOL_CALLS = 3;
 const MAX_COMMERCE_TOOL_RESULT_BYTES = 16_000;
@@ -158,9 +164,10 @@ type ReviewCandidate = {
 type CommerceSpecialistReviewStep = {
   key: string;
   label: string;
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'skipped';
   durationMs: number;
   errorCode: string | null;
+  unavailableReason: string | null;
 };
 
 type AiSummary = {
@@ -463,6 +470,7 @@ export class CommerceSpecialistAgentService {
         this.tenantPrisma.client.$transaction(async (tx) => {
           const run = await tx.specialistAgentRun.create({ data });
           await recordSpecialistAgentRunCreatedEvent(tx, run);
+          await recordSpecialistAgentRunStartedEvent(tx, run);
           return run;
         }),
       (keyBusinessId, agentKey, idempotencyKeyHash) =>
@@ -503,11 +511,17 @@ export class CommerceSpecialistAgentService {
       const readOnlyToolNames = new Set(
         readOnlyToolSchemas.map((tool) => tool.name),
       );
+      await this.toolGateway.assertToolSourcesEnabled(
+        scopedBusinessId,
+        AGENT_KEY,
+        [],
+        { actorUserId, runId: reservation.run.id },
+      );
       const first = await this.aiInfra.createMessage(
         scopedBusinessId,
         'commerce_agent',
         {
-          system: `You are Noxtill Autonomous Commerce Agent. Answer only from results of registered read-only Noxtill tools. Never request or imply a write, publication, supplier contact, stock/order change, customer message, payment, or approval. Do not invent missing values. State when a source is unavailable or an input could not be verified. Keep the answer concise, cite the tool names and canonical screen to review, and do not reveal hidden reasoning. ${SPECIALIST_AGENT_UNTRUSTED_DATA_POLICY}`,
+          system: `You are Noxtill Autonomous Commerce Agent. First use only registered read-only Noxtill tools to retrieve evidence; do not answer the question from memory or general assumptions. Never request or imply a write, publication, supplier contact, stock/order change, customer message, payment, or approval. Do not invent missing values. State when a source is unavailable or an input could not be verified. Do not reveal hidden reasoning. ${SPECIALIST_AGENT_UNTRUSTED_DATA_POLICY}`,
           messages: [
             {
               role: 'user',
@@ -532,12 +546,9 @@ export class CommerceSpecialistAgentService {
       const requestedCalls = first.content.filter(
         (block) => block.type === 'tool_use',
       );
-      let finalText = first.content
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text ?? '')
-        .join('\n')
-        .trim();
+      let finalText = '';
       let toolRoundLimited = false;
+      let answerFormatIncomplete = false;
 
       if (requestedCalls.length > 0) {
         const toolResults: AnthropicContentBlock[] = [];
@@ -707,12 +718,24 @@ export class CommerceSpecialistAgentService {
           }
         }
 
-        if (toolResults.length === requestedCalls.length) {
+        if (
+          toolResults.length === requestedCalls.length &&
+          toolTrace.some((item) => item.outcome === 'succeeded')
+        ) {
+          const successfulToolKeys = toolTrace
+            .filter((item) => item.outcome === 'succeeded')
+            .map((item) => item.tool);
+          await this.toolGateway.assertToolSourcesEnabled(
+            scopedBusinessId,
+            AGENT_KEY,
+            successfulToolKeys,
+            { actorUserId, runId: reservation.run.id },
+          );
           const final = await this.aiInfra.createMessage(
             scopedBusinessId,
             'commerce_agent',
             {
-              system: `Answer the original question only from the supplied registered tool results. Tool errors, omitted large results and blocked requests are not evidence of absence. Do not infer missing data, do not ask for or perform writes, and name the canonical screen for follow-up. Keep the response concise and state any limitation. ${SPECIALIST_AGENT_UNTRUSTED_DATA_POLICY}`,
+              system: `Answer the original question only from successful supplied registered tool results. Tool errors, omitted large results and blocked requests are not evidence of absence. Do not infer missing data, do not ask for or perform writes. Return exactly five markdown headings, each on its own line and in this order: "## Answer", "## Evidence", "## Calculation", "## Assumptions and gaps", and "## Confidence". Name the source tools and canonical screens; state unavailable sources and limitations. Put meaningful content under every heading. Confidence describes evidence coverage only and is not calibrated. ${SPECIALIST_AGENT_UNTRUSTED_DATA_POLICY}`,
               messages: [
                 {
                   role: 'user',
@@ -721,7 +744,12 @@ export class CommerceSpecialistAgentService {
                     normalizedQuestion,
                   ),
                 },
-                { role: 'assistant', content: first.content },
+                {
+                  role: 'assistant',
+                  content: first.content.filter(
+                    (block) => block.type === 'tool_use',
+                  ),
+                },
                 { role: 'user', content: toolResults },
               ],
               temperature: 0,
@@ -737,31 +765,71 @@ export class CommerceSpecialistAgentService {
             undefined,
             reservation.run.id,
           );
-          finalText = final.content
+          await this.toolGateway.assertToolSourcesEnabled(
+            scopedBusinessId,
+            AGENT_KEY,
+            successfulToolKeys,
+            { actorUserId, runId: reservation.run.id },
+          );
+          const candidateText = final.content
             .filter((block) => block.type === 'text')
             .map((block) => block.text ?? '')
             .join('\n')
             .trim();
+          const boundedText = candidateText.slice(0, 3_000);
+          finalText = hasRequiredSpecialistAgentAnswerSections(boundedText)
+            ? boundedText
+            : '';
+          answerFormatIncomplete = Boolean(candidateText && !finalText);
           if (final.stopReason === 'tool_use') toolRoundLimited = true;
         }
       }
 
       const answerStatus = finalText ? 'ready' : 'unavailable';
+      const hasSuccessfulEvidence = toolTrace.some(
+        (item) => item.outcome === 'succeeded',
+      );
       const message = finalText
         ? toolRoundLimited
           ? `Stopped after one read-only tool round and ${maxReadToolCalls} tool call${maxReadToolCalls === 1 ? '' : 's'} maximum. No write tools are available here.`
           : null
-        : 'The AI provider did not return a text answer. Review the recorded tool results in the canonical screens.';
+        : answerFormatIncomplete
+          ? 'The AI response did not include complete Answer, Evidence, Calculation, Assumptions and gaps, and Confidence sections. Review the recorded tool results in the canonical screens.'
+          : !hasSuccessfulEvidence
+            ? 'No registered Commerce source returned usable evidence for this question. Open the canonical screen or ask about a source available to the agent.'
+            : 'The AI provider did not return a grounded text answer. Review the recorded tool results in the canonical screens.';
       const finishedAt = new Date();
       const terminalStatus =
         answerStatus === 'ready' ? 'completed' : 'partially_succeeded';
+      await this.toolGateway.assertToolSourcesEnabled(
+        scopedBusinessId,
+        AGENT_KEY,
+        toolTrace
+          .filter((item) => item.outcome === 'succeeded')
+          .map((item) => item.tool),
+        { actorUserId, runId: reservation.run.id },
+      );
       return await this.tenantPrisma.client.$transaction(async (tx) => {
+        await this.agentPolicy.assertAgentEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          'commerce',
+        );
+        await this.toolGateway.assertToolSourcesEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          AGENT_KEY,
+          toolTrace
+            .filter((item) => item.outcome === 'succeeded')
+            .map((item) => item.tool),
+          { actorUserId, runId: reservation.run.id },
+        );
         const completed = await tx.specialistAgentRun.update({
           where: { id: reservation.run.id },
           data: {
             status: terminalStatus,
             output: {
-              answer: finalText.slice(0, 3_000),
+              answer: finalText || null,
               answerStatus,
               message,
               tools: toolTrace as unknown as Prisma.InputJsonArray,
@@ -852,8 +920,17 @@ export class CommerceSpecialistAgentService {
     }
   }
 
-  listRuns() {
-    return this.tenantPrisma.client.specialistAgentRun.findMany({
+  async listRuns() {
+    const scopedBusinessId =
+      this.cls.get<string>(CLS_KEY_BUSINESS_ID);
+    if (!scopedBusinessId) {
+      throw new AppException(
+        'COMMERCE_AGENT_BUSINESS_CONTEXT_REQUIRED',
+        'A business context is required to read Commerce Agent history.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    const runs = await this.tenantPrisma.client.specialistAgentRun.findMany({
       where: { agentKey: AGENT_KEY },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 10,
@@ -876,6 +953,37 @@ export class CommerceSpecialistAgentService {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         },
       },
+    });
+    const disabledModules = new Set(
+      await this.agentPolicy.disabledModulesForBusiness(scopedBusinessId),
+    );
+    return runs.map((run) => {
+      if (
+        !specialistAgentRunDetailsHiddenByModuleSelection(
+          run.output,
+          disabledModules,
+          [
+            'autonomous-commerce',
+            'integrations',
+            'products',
+            'orders',
+            'deliveries',
+            'inventory',
+          ],
+        )
+      ) {
+        return run;
+      }
+      return {
+        ...run,
+        output: {
+          message:
+            'Saved Commerce Agent details are hidden because a source module used by the agent is disabled. Enable the required modules and run a fresh review.',
+          summary:
+            'Saved Commerce Agent details are unavailable under the current module selection.',
+        },
+        recommendations: [],
+      };
     });
   }
 
@@ -987,6 +1095,7 @@ export class CommerceSpecialistAgentService {
         this.tenantPrisma.client.$transaction(async (tx) => {
           const run = await tx.specialistAgentRun.create({ data });
           await recordSpecialistAgentRunCreatedEvent(tx, run);
+          await recordSpecialistAgentRunStartedEvent(tx, run);
           return run;
         }),
       (keyBusinessId, agentKey, idempotencyKeyHash) =>
@@ -1321,6 +1430,7 @@ export class CommerceSpecialistAgentService {
         this.tenantPrisma.client.$transaction(async (tx) => {
           const run = await tx.specialistAgentRun.create({ data });
           await recordSpecialistAgentRunCreatedEvent(tx, run);
+          await recordSpecialistAgentRunStartedEvent(tx, run);
           return run;
         }),
       (keyBusinessId, agentKey, idempotencyKeyHash) =>
@@ -1661,6 +1771,9 @@ export class CommerceSpecialistAgentService {
     const scopedBusinessId =
       this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
     await this.agentPolicy.assertEnabled(scopedBusinessId, 'commerce');
+    const disabledSourceModules = new Set(
+      await this.agentPolicy.disabledModulesForBusiness(scopedBusinessId),
+    );
     const business = await this.tenantPrisma.client.business.findFirst({
       where: { id: scopedBusinessId },
       select: { policies: true },
@@ -1706,41 +1819,69 @@ export class CommerceSpecialistAgentService {
           includesCustomerIdentifiers: false,
           includesProviderMetrics: false,
         },
-        {
-          source: 'canonical_supplier_claim_summary',
-          scope: 'current_business',
-          includesClaimText: false,
-          includesSupplierIdentifiers: false,
-        },
-        {
-          source: 'canonical_delivery_exception_summary',
-          scope: 'current_business',
-          includesCustomerIdentifiers: false,
-          includesAddresses: false,
-          includesFreeTextFailureNotes: false,
-        },
-        {
-          source: 'canonical_fulfillment_router_queue',
-          scope: 'current_business',
-          includesCustomerIdentifiers: false,
-          includesOrderIdentifiers: false,
-          includesAddresses: false,
-          includesPrices: false,
-        },
-        {
-          source: 'canonical_production_assembly_counts',
-          scope: 'current_business',
-          includesProductNames: false,
-          includesDemandSourceText: false,
-          includesCosts: false,
-        },
-        {
-          source: 'canonical_product_inventory_snapshot',
-          scope: 'current_business',
-          fields: ['Product.stockQty', 'Product.lowStockThreshold'],
-          linkedBy: 'CommerceChannelListing.status=synced',
-          excludesProviderStockClaims: true,
-        },
+        ...(!disabledSourceModules.has('inventory')
+          ? [
+              {
+                source: 'canonical_sourcing_quote_comparison',
+                scope: 'current_business',
+                includesSupplierIdentifiers: false,
+                includesProviderMetrics: false,
+              },
+              {
+                source: 'canonical_supplier_claim_summary',
+                scope: 'current_business',
+                includesClaimText: false,
+                includesSupplierIdentifiers: false,
+              },
+            ]
+          : []),
+        ...(!['deliveries', 'orders'].some((module) =>
+          disabledSourceModules.has(module),
+        )
+          ? [
+              {
+                source: 'canonical_delivery_exception_summary',
+                scope: 'current_business',
+                includesCustomerIdentifiers: false,
+                includesAddresses: false,
+                includesFreeTextFailureNotes: false,
+              },
+            ]
+          : []),
+        ...(!['orders', 'inventory', 'products'].some((module) =>
+          disabledSourceModules.has(module),
+        )
+          ? [
+              {
+                source: 'canonical_fulfillment_router_queue',
+                scope: 'current_business',
+                includesCustomerIdentifiers: false,
+                includesOrderIdentifiers: false,
+                includesAddresses: false,
+                includesPrices: false,
+              },
+            ]
+          : []),
+        ...(!['products', 'inventory'].some((module) =>
+          disabledSourceModules.has(module),
+        )
+          ? [
+              {
+                source: 'canonical_production_assembly_counts',
+                scope: 'current_business',
+                includesProductNames: false,
+                includesDemandSourceText: false,
+                includesCosts: false,
+              },
+              {
+                source: 'canonical_product_inventory_snapshot',
+                scope: 'current_business',
+                fields: ['Product.stockQty', 'Product.lowStockThreshold'],
+                linkedBy: 'CommerceChannelListing.status=synced',
+                excludesProviderStockClaims: true,
+              },
+            ]
+          : []),
       ],
       policyResult: {
         autonomyLevel: 'L0',
@@ -1757,6 +1898,7 @@ export class CommerceSpecialistAgentService {
         this.tenantPrisma.client.$transaction(async (tx) => {
           const run = await tx.specialistAgentRun.create({ data });
           await recordSpecialistAgentRunCreatedEvent(tx, run);
+          await recordSpecialistAgentRunStartedEvent(tx, run);
           return run;
         }),
       (keyBusinessId, agentKey, idempotencyKeyHash) =>
@@ -1797,7 +1939,22 @@ export class CommerceSpecialistAgentService {
         key: string,
         label: string,
         operation: () => Promise<T>,
+        requiredModules: string[] = [],
       ): Promise<T | null> => {
+        const unavailableModules = requiredModules.filter((module) =>
+          disabledSourceModules.has(module),
+        );
+        if (unavailableModules.length > 0) {
+          reviewSteps.push({
+            key,
+            label,
+            status: 'skipped',
+            durationMs: 0,
+            errorCode: null,
+            unavailableReason: `Not read because ${unavailableModules.join(', ')} ${unavailableModules.length === 1 ? 'module is' : 'modules are'} disabled in Settings → Modules.`,
+          });
+          return null;
+        }
         const stepStartedAt = Date.now();
         try {
           const value = await operation();
@@ -1807,6 +1964,7 @@ export class CommerceSpecialistAgentService {
             status: 'completed',
             durationMs: Date.now() - stepStartedAt,
             errorCode: null,
+            unavailableReason: null,
           });
           return value;
         } catch (error) {
@@ -1816,6 +1974,7 @@ export class CommerceSpecialistAgentService {
             status: 'failed',
             durationMs: Date.now() - stepStartedAt,
             errorCode: responseErrorCode(error),
+            unavailableReason: 'The source query failed; its result was not inferred.',
           });
           return null;
         }
@@ -1824,6 +1983,7 @@ export class CommerceSpecialistAgentService {
         'sourcing',
         'Recorded supplier quotes',
         () => this.reviewRecordedQuotes(scopedBusinessId, observedAt),
+        ['inventory'],
       );
       const validationScorecards = await captureReviewStep(
         'validation',
@@ -1834,31 +1994,37 @@ export class CommerceSpecialistAgentService {
         'reconciliation',
         'Saved listing reconciliation',
         () => this.reviewSavedReconciliation(scopedBusinessId),
+        ['integrations'],
       );
       const experimentReview = await captureReviewStep(
         'experiments',
         'Experiment outcomes',
         () => this.commerceExperiments.specialistReview(scopedBusinessId),
+        ['products', 'orders'],
       );
       const supplierClaimReview = await captureReviewStep(
         'supplier_claims',
         'Supplier claim records',
         () => this.supplierClaims.specialistReview(scopedBusinessId),
+        ['inventory'],
       );
       const deliveryExceptionReview = await captureReviewStep(
         'delivery_exceptions',
         'Delivery exception records',
         () => this.deliveryInsights.specialistExceptionReview(scopedBusinessId),
+        ['deliveries', 'orders'],
       );
       const fulfillmentReview = await captureReviewStep(
         'fulfillment',
         'Fulfillment routing queue',
         () => this.fulfillmentRouter.specialistReview(scopedBusinessId),
+        ['orders', 'inventory', 'products'],
       );
       const productionReview = await captureReviewStep(
         'production',
         'Production and assembly records',
         () => this.production.agentReview(scopedBusinessId, observedAt),
+        ['products', 'inventory'],
       );
       const inventoryAvailabilityReview = await captureReviewStep(
         'inventory_availability',
@@ -1868,17 +2034,18 @@ export class CommerceSpecialistAgentService {
             scopedBusinessId,
             observedAt,
           ),
+        ['products', 'inventory'],
       );
       const candidate = this.nextReview(snapshot, productionReview);
-      const failedReviewSteps = reviewSteps.filter(
-        (step) => step.status === 'failed',
+      const unavailableReviewSteps = reviewSteps.filter(
+        (step) => step.status !== 'completed',
       );
-      const partialCoverageNote = failedReviewSteps.length
-        ? ` ${failedReviewSteps.length} supporting review source(s) could not be read; see the per-source status. No result is inferred for those sources.`
+      const partialCoverageNote = unavailableReviewSteps.length
+        ? ` ${unavailableReviewSteps.length} supporting review source(s) were unavailable or disabled; see the per-source status. No result is inferred for those sources.`
         : '';
       const summary = candidate
         ? `${candidate.summary} This is a review cue based on recorded workflow states, not a finding that the item is incorrect or blocked.${partialCoverageNote}`
-        : failedReviewSteps.length
+        : unavailableReviewSteps.length
           ? `The canonical Commerce status snapshot was reviewed, but supporting review sources were unavailable. No conclusion is made about queues that could not be read.${partialCoverageNote}`
           : 'No records in the reviewed Commerce queues currently match the defined review checks. This does not establish that all commerce operations are healthy or complete.';
       const assumptions = [
@@ -1903,18 +2070,66 @@ export class CommerceSpecialistAgentService {
         'Supplier claim settlements may include credits or replacements and do not prove cash receipt or delivery. Supplier communication and claim outcomes are not independently confirmed.',
         'The review does not publish listings, create or award RFQs, change inventory or orders, clear risk cases, run experiments or send customer messages.',
         'Production work orders and output are counted from recorded records only; supplier delivery and machine/labor capacity are not measured.',
-        ...failedReviewSteps.map(
+        ...unavailableReviewSteps.map(
           (step) =>
-            `${step.label} could not be read for this run (error code ${step.errorCode}); its result is unavailable and was not inferred.`,
+            `${step.label} is unavailable for this run: ${step.unavailableReason ?? `error code ${step.errorCode ?? 'unknown'}`}`,
         ),
       ];
+      const includedSourceModules = [
+        'autonomous-commerce',
+        ...[
+          'integrations',
+          'products',
+          'orders',
+          'deliveries',
+          'inventory',
+        ].filter((moduleKey) => !disabledSourceModules.has(moduleKey)),
+      ];
+      await this.toolGateway.assertToolSourcesEnabled(
+        scopedBusinessId,
+        AGENT_KEY,
+        [],
+        { actorUserId, runId: run.id },
+      );
       const aiSummary =
         options.includeAiSummary === false
           ? null
-          : await this.summarize(scopedBusinessId, snapshot, run.id);
+          : await this.summarize(
+              scopedBusinessId,
+              snapshot,
+              run.id,
+              includedSourceModules,
+            );
+      await this.toolGateway.assertToolSourcesEnabled(
+        scopedBusinessId,
+        AGENT_KEY,
+        [],
+        { actorUserId, runId: run.id },
+      );
+      await this.agentPolicy.assertSourceModulesEnabledForBusiness(
+        scopedBusinessId,
+        includedSourceModules,
+      );
       const finishedAt = new Date();
       const output = {
         source: 'canonical_commerce_status_counts',
+        moduleSelectionVersion: 1,
+        moduleSources: {
+          'autonomous-commerce': 'included',
+          integrations: disabledSourceModules.has('integrations')
+            ? 'disabled'
+            : 'included',
+          products: disabledSourceModules.has('products')
+            ? 'disabled'
+            : 'included',
+          orders: disabledSourceModules.has('orders') ? 'disabled' : 'included',
+          deliveries: disabledSourceModules.has('deliveries')
+            ? 'disabled'
+            : 'included',
+          inventory: disabledSourceModules.has('inventory')
+            ? 'disabled'
+            : 'included',
+        },
         snapshot,
         sourcingReview,
         validationScorecards,
@@ -1932,7 +2147,16 @@ export class CommerceSpecialistAgentService {
           inventoryAvailabilityReview as unknown as Prisma.InputJsonObject | null,
         summary,
         aiSummary,
-        coverage: 'canonical_status_counts_and_saved_operational_evidence',
+        unavailableReviewSteps: unavailableReviewSteps.map((step) => ({
+          key: step.key,
+          label: step.label,
+          status: step.status,
+          errorCode: step.errorCode,
+          unavailableReason: step.unavailableReason,
+        })),
+        coverage: unavailableReviewSteps.length
+          ? 'canonical_status_counts_and_partial_saved_operational_evidence'
+          : 'canonical_status_counts_and_saved_operational_evidence',
         observedAt: observedAt.toISOString(),
         durationMs: finishedAt.getTime() - startedAt.getTime(),
       } satisfies Prisma.InputJsonObject;
@@ -1942,7 +2166,24 @@ export class CommerceSpecialistAgentService {
       } satisfies Prisma.InputJsonObject;
 
       return await this.tenantPrisma.client.$transaction(async (tx) => {
-        const runStatus = failedReviewSteps.length
+        await this.agentPolicy.assertAgentEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          'commerce',
+        );
+        await this.agentPolicy.assertSourceModulesEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          includedSourceModules,
+        );
+        await this.toolGateway.assertToolSourcesEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          AGENT_KEY,
+          [],
+          { actorUserId, runId: run.id },
+        );
+        const runStatus = unavailableReviewSteps.length
           ? 'partially_succeeded'
           : 'completed';
         const completed = await tx.specialistAgentRun.update({
@@ -1993,10 +2234,9 @@ export class CommerceSpecialistAgentService {
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          sourcingReview?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: sourcingReview
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType: 'commerce_rfq_quote_comparison',
                         resourceId: scopedBusinessId,
                         fieldRefs: [
@@ -2018,20 +2258,16 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          sourcingReview?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: sourcingReview ? 'fresh' : 'unavailable',
                         calculation:
                           'For each of the 50 most recently updated open RFQs, inspect up to five latest submitted/shortlisted quotes. A quote is comparable only if its currency matches the RFQ, it is unexpired, every requested line appears exactly once, quoted quantities equal requested quantities, and supplier minimum quantities do not exceed requested quantities. Landed total = sum(unit price × quoted quantity) + freight + duties using exact decimal arithmetic. The lowest comparable total is shown only when at least two comparable quotes exist; it is not an overall supplier recommendation or an award decision.',
                       },
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          validationScorecards?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: validationScorecards
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType: 'commerce_validation_scorecards',
                         resourceId: scopedBusinessId,
                         fieldRefs: [
@@ -2050,20 +2286,16 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          validationScorecards?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: validationScorecards ? 'fresh' : 'unavailable',
                         calculation:
                           'Review up to 20 current validation_requested ProductOpportunity records, newest first. Group tracked fields by evidence dimension and classify field availability only. No dimension score, overall score, probability, recommendation, or pass/fail result is calculated; source verification and unsupported compliance/return-risk inputs remain disclosed.',
                       },
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          reconciliationReview?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: reconciliationReview
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType: 'commerce_listing_reconciliation',
                         resourceId: scopedBusinessId,
                         fieldRefs: [
@@ -2080,20 +2312,16 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          reconciliationReview?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: reconciliationReview ? 'fresh' : 'unavailable',
                         calculation:
                           'Read the 20 latest saved CommerceReconciliationRun records and group all currently open CommerceReconciliationItem records by provider and stored discrepancy kind. No provider is queried and no external state is inferred.',
                       },
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          experimentReview?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: experimentReview
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType: 'commerce_experiment_results',
                         resourceId: scopedBusinessId,
                         fieldRefs: [
@@ -2111,20 +2339,16 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          experimentReview?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: experimentReview ? 'fresh' : 'unavailable',
                         calculation:
                           'Reuse CommerceExperimentsService.specialistReview: running experiment results are computed by the canonical equal-length order/return windows; stopped and decided experiments use their frozen canonical result snapshot. This is observational, not causal or statistically significant.',
                       },
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          supplierClaimReview?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: supplierClaimReview
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType: 'commerce_supplier_claims',
                         resourceId: scopedBusinessId,
                         fieldRefs: [
@@ -2142,20 +2366,16 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          supplierClaimReview?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: supplierClaimReview ? 'fresh' : 'unavailable',
                         calculation:
                           'Group current canonical supplier claims by their stored status and itemize at most the 20 most recently updated records. Recorded loss is the sum of operator-entered product, freight and other loss amounts. Recorded settlement is the sum of operator-entered settlement amounts; neither is independently verified and settlement can include non-cash credits or replacements. Sensitive claim text and supplier identifiers are omitted.',
                       },
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          deliveryExceptionReview?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: deliveryExceptionReview
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType: 'delivery_exception_follow_up',
                         resourceId: scopedBusinessId,
                         fieldRefs: [
@@ -2169,20 +2389,16 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          deliveryExceptionReview?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: deliveryExceptionReview ? 'fresh' : 'unavailable',
                         calculation:
                           'Reuse DeliveryInsightsService.specialistExceptionReview: count tenant-scoped Delivery rows with stored status failed, and review at most the 20 newest. A failed delivery is resolved only when the latest same-business Return for its order is approved, matching Deliveries → Exceptions. Customer data, addresses, free-text failure notes and amounts are omitted; no cause or external carrier result is inferred.',
                       },
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          fulfillmentReview?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: fulfillmentReview
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType: 'commerce_fulfillment_review',
                         resourceId: scopedBusinessId,
                         fieldRefs: [
@@ -2199,10 +2415,7 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          fulfillmentReview?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: fulfillmentReview ? 'fresh' : 'unavailable',
                         calculation:
                           'Reuse CommerceFulfillmentRouterService.specialistReview and the canonical router queue/rules. Count all eligible open shipping orders and review the 20 newest. Each row is categorized from its recorded active route or live candidate. The queue has no destination country, so market coverage remains unknown; no route, inventory reservation, customer promise or external confirmation is written or inferred.',
                       },
@@ -2234,10 +2447,9 @@ export class CommerceSpecialistAgentService {
                       {
                         business: { connect: { id: scopedBusinessId } },
                         run: { connect: { id: run.id } },
-                        sourceType:
-                          inventoryAvailabilityReview?.state === 'available'
-                            ? 'database_records'
-                            : 'unavailable',
+                        sourceType: inventoryAvailabilityReview
+                          ? 'database_records'
+                          : 'unavailable',
                         resourceType:
                           'commerce_internal_inventory_availability',
                         resourceId: scopedBusinessId,
@@ -2253,10 +2465,9 @@ export class CommerceSpecialistAgentService {
                         }) as unknown as Prisma.InputJsonObject,
                         observedAt,
                         fetchedAt: finishedAt,
-                        freshness:
-                          inventoryAvailabilityReview?.state === 'available'
-                            ? 'fresh'
-                            : 'unavailable',
+                        freshness: inventoryAvailabilityReview
+                          ? 'fresh'
+                          : 'unavailable',
                         calculation:
                           'Read active Product rows linked to at least one saved CommerceChannelListing with status synced, ordered by stockQty, name and id, capped at 50. Compare Product.stockQty <= Product.lowStockThreshold only for returned rows. This is a Noxtill business-level snapshot; it does not establish provider stock, branch-level allocation, reservation or availability on the external storefront.',
                       },
@@ -2752,8 +2963,13 @@ export class CommerceSpecialistAgentService {
     businessId: string,
     snapshot: CommerceSnapshot,
     specialistAgentRunId: string,
+    sourceModuleKeys: readonly string[],
   ): Promise<AiSummary> {
     try {
+      await this.agentPolicy.assertSourceModulesEnabledForBusiness(
+        businessId,
+        sourceModuleKeys,
+      );
       const response = await this.aiInfra.createMessage(
         businessId,
         'commerce_agent',
@@ -2772,6 +2988,10 @@ export class CommerceSpecialistAgentService {
         undefined,
         specialistAgentRunId,
       );
+      await this.agentPolicy.assertSourceModulesEnabledForBusiness(
+        businessId,
+        sourceModuleKeys,
+      );
       const text = response.content
         .filter((block) => block.type === 'text')
         .map((block) => block.text)
@@ -2786,6 +3006,7 @@ export class CommerceSpecialistAgentService {
         outputTokens: response.outputTokens,
       };
     } catch (error) {
+      if (isSpecialistSourceModuleDisabledError(error)) throw error;
       if (error instanceof AppException) {
         const body = error.getResponse();
         const message =

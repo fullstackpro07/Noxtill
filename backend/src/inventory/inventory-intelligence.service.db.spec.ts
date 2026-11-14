@@ -1319,7 +1319,7 @@ describe('InventoryIntelligenceService (MySQL)', () => {
       data: {
         businessId: otherBusinessId,
         agentKey: 'inventory_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.14.0',
         moduleId: '13',
         status: 'completed',
         inputRefs: [],
@@ -1448,7 +1448,7 @@ describe('InventoryIntelligenceService (MySQL)', () => {
       data: {
         businessId: otherBusinessId,
         agentKey: 'inventory_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.14.0',
         moduleId: '13',
         status: 'completed',
         inputRefs: [],
@@ -1581,7 +1581,7 @@ describe('InventoryIntelligenceService (MySQL)', () => {
       data: {
         businessId: otherBusinessId,
         agentKey: 'inventory_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.14.0',
         moduleId: '13',
         status: 'completed',
         inputRefs: [],

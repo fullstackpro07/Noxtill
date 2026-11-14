@@ -104,4 +104,23 @@ describe('resolveSpecialistAgentEventAttempt (MySQL)', () => {
     );
     expect(blockedByCompleted.shouldRun).toBe(false);
   });
+
+  it('does not start a queued event review for an inactive business', async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { active: false },
+    });
+
+    const attempt = await resolveSpecialistAgentEventAttempt(prisma, {
+      businessId,
+      agentKey: 'inventory_intelligence',
+      baseIdempotencyKey: `inactive-event:${businessId}`,
+      attemptsMade: 0,
+    });
+
+    expect(attempt).toEqual({
+      shouldRun: false,
+      idempotencyKey: `inactive-event:${businessId}`,
+    });
+  });
 });

@@ -29,6 +29,7 @@ describe('SpecialistAgentScheduleProcessor (MySQL)', () => {
   let defaultBusinessId: string;
   let commerceDisabledBusinessId: string;
   let moduleDisabledBusinessId: string;
+  let inactiveBusinessId: string;
   const inventoryRun = jest.fn();
   const otherRuns = [jest.fn(), jest.fn(), jest.fn(), jest.fn()];
 
@@ -82,6 +83,18 @@ describe('SpecialistAgentScheduleProcessor (MySQL)', () => {
         },
       })
     ).id;
+    inactiveBusinessId = (
+      await prisma.business.create({
+        data: {
+          name: 'Specialist Schedule Inactive Branch Test',
+          slug: `specialist-schedule-inactive-${stamp}`,
+          active: false,
+          policies: {
+            'agents.inventoryDailyReviewEnabled': true,
+          },
+        },
+      })
+    ).id;
 
     inventoryRun.mockImplementation(
       async (
@@ -126,6 +139,7 @@ describe('SpecialistAgentScheduleProcessor (MySQL)', () => {
             defaultBusinessId,
             commerceDisabledBusinessId,
             moduleDisabledBusinessId,
+            inactiveBusinessId,
           ],
         },
       },
@@ -139,6 +153,7 @@ describe('SpecialistAgentScheduleProcessor (MySQL)', () => {
             defaultBusinessId,
             commerceDisabledBusinessId,
             moduleDisabledBusinessId,
+            inactiveBusinessId,
           ],
         },
       },
@@ -168,6 +183,11 @@ describe('SpecialistAgentScheduleProcessor (MySQL)', () => {
     expect(
       await prisma.specialistAgentRun.count({
         where: { businessId: moduleDisabledBusinessId },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.specialistAgentRun.count({
+        where: { businessId: inactiveBusinessId },
       }),
     ).toBe(0);
 

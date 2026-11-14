@@ -1,11 +1,17 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappWindowService } from '../whatsapp/whatsapp-window.service';
 import { WEBHOOK_EVENTS_QUEUE } from './webhooks.constants';
 import { EmailEventType, MessageChannel, MessageStatus } from '@prisma/client';
 import { normalizePhoneE164 } from '../common/utils/phone.util';
+import {
+  CUSTOMER_AGENT_MESSAGE_SEND_IDEMPOTENCY_PREFIX,
+  CUSTOMER_MESSAGE_DELIVERY_CONFIRMED_EVENT_JOB,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 const META_STATUS_MAP: Record<string, MessageStatus> = {
   sent: MessageStatus.sent,
@@ -68,6 +74,9 @@ export class WebhookEventsProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsappWindow: WhatsappWindowService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly customerAgentEvents?: Queue,
   ) {
     super();
   }
@@ -255,7 +264,27 @@ export class WebhookEventsProcessor extends WorkerHost {
     const allowedPrevious = Object.values(MessageStatus).filter(
       (current) => STATUS_ORDER[current] <= STATUS_ORDER[next],
     );
-    await this.prisma.message.updateMany({
+    const newlyConfirmed =
+      this.customerAgentEvents &&
+      (next === MessageStatus.delivered || next === MessageStatus.read)
+        ? await this.prisma.message.findMany({
+            where: {
+              providerRef,
+              channel,
+              customerId: { not: null },
+              idempotencyKey: {
+                startsWith: CUSTOMER_AGENT_MESSAGE_SEND_IDEMPOTENCY_PREFIX,
+              },
+              status: {
+                in: allowedPrevious,
+                notIn: [MessageStatus.delivered, MessageStatus.read],
+              },
+            },
+            orderBy: [{ businessId: 'asc' }, { id: 'asc' }],
+            select: { id: true, businessId: true },
+          })
+        : [];
+    const updated = await this.prisma.message.updateMany({
       where: {
         providerRef,
         channel,
@@ -263,6 +292,29 @@ export class WebhookEventsProcessor extends WorkerHost {
       },
       data: { status: next },
     });
+    if (updated.count === 0 || !this.customerAgentEvents) return;
+
+    await Promise.all(
+      newlyConfirmed.map(async (message) => {
+        try {
+          await this.customerAgentEvents!.add(
+            CUSTOMER_MESSAGE_DELIVERY_CONFIRMED_EVENT_JOB,
+            { businessId: message.businessId, messageId: message.id },
+            {
+              jobId: `customer-message-confirmed-${message.businessId}-${message.id}`,
+              attempts: 5,
+              backoff: { type: 'exponential', delay: 1_000 },
+              removeOnComplete: 500,
+              removeOnFail: 1_000,
+            },
+          );
+        } catch {
+          this.logger.warn(
+            `Could not queue optional Customer Agent delivery review for business ${message.businessId}`,
+          );
+        }
+      }),
+    );
   }
 
   private async handleEmailEvent(body: {

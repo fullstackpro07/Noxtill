@@ -8,6 +8,7 @@ import { askConfirm } from "@/lib/ask-dialog";
 import {
   createCustomerAgentMessageDraft,
   createCustomerFollowUpTask,
+  askCustomerAgent,
   fetchCustomerChannelConsent,
   fetchCustomerAgentMessageDrafts,
   fetchCustomerFollowUpTasks,
@@ -17,6 +18,7 @@ import {
   queueCustomerAgentMessageDraft,
   recordCustomerChannelConsent,
   updateCustomerAgentMessageDraft,
+  type CustomerAgentRun,
   type CustomerAgentMessageSendPreview,
   type CustomerChannelConsent,
   type CustomerMessageDraftPurpose,
@@ -43,10 +45,20 @@ export function CustomerProfileIntelligencePanel({ customerId }: { customerId: s
   const [consentState, setConsentState] = useState<"granted" | "revoked" | "">("");
   const [consentSource, setConsentSource] = useState<"customer_portal" | "website_form" | "paper_form" | "recorded_call" | "in_person" | "other" | "">("");
   const [consentReference, setConsentReference] = useState("");
+  const [customerQuestion, setCustomerQuestion] = useState("");
   const taskKey = useRef<string | null>(null);
   const draftKey = useRef<string | null>(null);
   const aiDraftKey = useRef<string | null>(null);
   const queryClient = useQueryClient();
+  const customerQuestionMutation = useMutation<CustomerAgentRun, Error>({
+    mutationFn: () => askCustomerAgent(customerQuestion, customerId),
+    onSuccess: () => {
+      setCustomerQuestion("");
+      toast.success("Customer Agent answer saved with its source tools.");
+    },
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : "Could not answer this customer question."),
+  });
   const query = useQuery({
     queryKey: ["customer-profile-intelligence", customerId],
     queryFn: () => fetchCustomerProfileIntelligence(customerId),
@@ -199,7 +211,7 @@ export function CustomerProfileIntelligencePanel({ customerId }: { customerId: s
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-[760px]">
           <h2 className="text-[15px] font-extrabold">Customer Intelligence · profile review</h2>
-          <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>Review authorized customer activity and a transparent human follow-up cue. The narrative is deterministic, source-based and partial; customer-level details are not sent to an AI provider.</p>
+          <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>Review authorized customer activity and ask a read-only question. The AI receives only permission-checked, privacy-minimized records; the selected customer ID and contact details stay server-side.</p>
         </div>
         <button type="button" onClick={() => started ? void query.refetch() : setStarted(true)} disabled={query.isFetching} className="rounded-[10px] px-4 py-2.5 text-[12px] font-bold text-white disabled:opacity-60" style={{ background: "var(--app-primary)" }}>
           {query.isFetching ? "Reviewing profile…" : data ? "Refresh profile review" : "Review profile intelligence"}
@@ -216,6 +228,38 @@ export function CustomerProfileIntelligencePanel({ customerId }: { customerId: s
           </div>
           {data.narrative.text.split("\n\n").map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 24)}`} className="mt-2 leading-relaxed">{paragraph}</p>)}
         </article>
+        <article className="rounded-[10px] p-3" style={box}>
+          <h3 className="font-bold">Ask about this customer</h3>
+          <p className="mt-1 text-[11px]" style={{ color: "var(--app-text-muted)" }}>Read-only answer using the selected customer’s authorized activity, order, booking, consent, loyalty and message-status tools. No record or message is changed.</p>
+          <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => {
+            event.preventDefault();
+            customerQuestionMutation.mutate();
+          }}>
+            <input
+              value={customerQuestion}
+              onChange={(event) => setCustomerQuestion(event.target.value)}
+              maxLength={1_000}
+              aria-label="Ask a question about this customer"
+              placeholder="Ask about recorded orders or bookings"
+              className="min-w-0 flex-1 rounded-[8px] px-2.5 py-2 text-[12px] outline-none"
+              style={box}
+            />
+            <button type="submit" disabled={customerQuestionMutation.isPending || customerQuestion.trim().length < 4} className="rounded-[8px] px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50" style={{ background: "var(--app-primary)" }}>
+              {customerQuestionMutation.isPending ? "Checking…" : "Ask"}
+            </button>
+          </form>
+          {customerQuestionMutation.data?.output?.answer && <div className="mt-3 rounded-[8px] p-3" style={{ background: "var(--app-surface-2)" }}>
+            <p className="m-0 whitespace-pre-wrap leading-relaxed">{customerQuestionMutation.data.output.answer}</p>
+            {(customerQuestionMutation.data.output.tools?.length ?? 0) > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {customerQuestionMutation.data.output.tools?.map((tool, index) => <div key={`${tool.tool}:${index}`} className="rounded-lg border p-2" style={{ color: "var(--app-text-muted)", background: "var(--app-surface)", borderColor: "var(--app-border)" }}>
+                <p className="m-0 text-[10px] font-bold">{tool.tool} · {tool.outcome}</p>
+                {tool.outcome === "succeeded" && <p className="mb-0 mt-1 text-[10px] leading-relaxed">{tool.summary}</p>}
+                {tool.screen?.startsWith("/") && !tool.screen.startsWith("//") && <Link href={tool.screen} className="mt-1 inline-block text-[10px] font-bold underline">Open source screen</Link>}
+              </div>)}
+            </div>}
+          </div>}
+          {customerQuestionMutation.data?.output?.message && <p role="status" className="mt-2 text-[11px]" style={{ color: "var(--app-text-muted)" }}>{customerQuestionMutation.data.output.message}</p>}
+        </article>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <article className="rounded-[10px] p-3" style={box}>
             <h3 className="font-bold">Completed orders</h3>
@@ -225,7 +269,7 @@ export function CustomerProfileIntelligencePanel({ customerId }: { customerId: s
             <h3 className="font-bold">RFM source values · no score</h3>
             {data.rfm.recency.state === "available" ? <p className="mt-2">Recency: {data.rfm.recency.daysSinceLatestCompletedOrder === null ? "No completed order recorded" : `${data.rfm.recency.daysSinceLatestCompletedOrder} days since last completed order`}</p> : <p className="mt-2">Recency: Not available · Orders is disabled</p>}
             {data.rfm.frequency.state === "available" ? <p>Frequency: {data.rfm.frequency.completedNonQuotationOrderCount} completed orders recorded</p> : <p>Frequency: Not available · Orders is disabled</p>}
-            <p>Monetary: {data.rfm.monetary.state === "restricted" ? "Restricted" : data.rfm.monetary.recordedLifetimeSpend !== null && data.rfm.monetary.currency ? formatCurrency(data.rfm.monetary.recordedLifetimeSpend, data.rfm.monetary.currency) : "Not recorded"}</p>
+            <p>Monetary: {data.rfm.monetary.state === "module_disabled" ? "Not available · Profit & Analytics is disabled" : data.rfm.monetary.state === "restricted" ? "Restricted" : data.rfm.monetary.recordedLifetimeSpend !== null && data.rfm.monetary.currency ? formatCurrency(data.rfm.monetary.recordedLifetimeSpend, data.rfm.monetary.currency) : "Not recorded"}</p>
             <p className="mt-1 text-[11px]">{data.rfm.score.message} CRM lifetime spend is not recomputed from orders or netted for refunds.</p>
           </article>
           <article className="rounded-[10px] p-3" style={box}>
@@ -388,11 +432,13 @@ export function CustomerProfileIntelligencePanel({ customerId }: { customerId: s
           <article className="rounded-[10px] p-3" style={box}>
             <h3 className="font-bold">Profile context and privacy</h3>
             <p className="mt-1">Recorded visits: {data.profile.recordedVisits} · Last visit: {data.profile.lastVisitAt ? formatDate(data.profile.lastVisitAt) : "Not recorded"}</p>
-            <p className="mt-1">Recorded lifetime spend: {data.financial.recordedLifetimeSpend !== null && data.financial.currency ? formatCurrency(data.financial.recordedLifetimeSpend, data.financial.currency) : "Restricted"}</p>
+            <p className="mt-1">Recorded lifetime spend: {data.financial.state === "module_disabled" ? "Not available · Profit & Analytics is disabled" : data.financial.recordedLifetimeSpend !== null && data.financial.currency ? formatCurrency(data.financial.recordedLifetimeSpend, data.financial.currency) : "Restricted"}</p>
+            <p className="mt-1">Recorded Credit ledger balance: {data.credit.state === "available" && data.credit.balance !== null && data.credit.currency ? formatCurrency(data.credit.balance, data.credit.currency) : data.credit.state === "module_disabled" ? "Not available · Credit is disabled" : "Restricted"}</p>
+            {data.credit.state === "available" && <p className="mt-1 text-[11px]">{data.credit.entryCount} ledger entries · Latest: {data.credit.lastEntryAt ? formatDate(data.credit.lastEntryAt) : "No entries recorded"}</p>}
             <p className="mt-1">Business-memory notes: {data.notes.count ?? "Restricted"} · Content is not included</p>
             <p className="mt-1">Unresolved support tickets: {data.support.unresolvedCount ?? "Restricted"}</p>
             {data.support.state === "restricted" && <p className="mt-1 text-[11px]">Support metadata requires Voice access and an enabled Phone Receptionist module.</p>}
-            <p className="mt-1 text-[11px]">Credit and payment details are not included. This summary is not persisted.</p>
+            <p className="mt-1 text-[11px]">Credit is shown only with Credit manage permission. Entry notes and payment-method details are excluded. This summary is not persisted.</p>
           </article>
         </div>
         <details>

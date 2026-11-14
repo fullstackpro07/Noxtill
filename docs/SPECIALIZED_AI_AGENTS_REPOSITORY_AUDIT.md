@@ -15,7 +15,7 @@ capability is already implemented. It defines no delivery timeline.
 | AI provider guardrails | `AiInfraService` centralizes model requests, rate limits, cost cap, feature toggles and usage logging; specialist requests reserve per-agent caps and link completed usage to runs | Reuse; cost is an application estimate, not a provider invoice |
 | Human action queue | Dashboard Action Center synthesizes canonical work and records complete/dismiss/snooze state; Procurement approvals already use canonical decisions | Reuse; do not build a second approval inbox |
 | Workflow execution | Automations has workflow runs, retries, approvals, schedules and agent steps | Reuse for scheduled/event-driven work where appropriate |
-| Shared specialist run/evidence/action records | Tenant-scoped `SpecialistAgentRun`, `SpecialistAgentRecommendation`, `SpecialistAgentEvidence`, `SpecialistAgentAction`, run-linked AI usage, per-agent request reservations, and idempotent run/action creation exist. Run-created/terminal snapshots are materialized when an owner opens run history; all saved action transitions and proposal revisions are normalized there in cursor-paged metadata events. Intermediate run-state changes are not captured. A shared typed tool gateway records redacted tenant-scoped calls for registered providers; Commerce, Inventory, SEO and Finance use it, and Customer uses it for canonical analytics, customer-review context, repeat-visitor preview and latest channel-consent status. A configurable per-run tool-call cap is enforced by the gateway. There is no generic metric-snapshot model. | Partial foundation; canonical module services still own approval and writes |
+| Shared specialist run/evidence/action records | Tenant-scoped `SpecialistAgentRun`, `SpecialistAgentRecommendation`, `SpecialistAgentEvidence`, `SpecialistAgentAction`, run-linked AI usage, per-agent request reservations, and idempotent run/action creation exist. Run-created/terminal snapshots are materialized when an owner opens run history; direct specialist runs also persist a started event, while queued orchestration records worker pickup. Saved action transitions and proposal revisions are normalized there in cursor-paged metadata events. Other intermediate run-state changes are not captured. A shared typed tool gateway records redacted tenant-scoped calls for registered providers; Commerce, Inventory, SEO and Finance use it, and Customer uses it for canonical analytics, customer-review context, repeat-visitor preview and latest channel-consent status. A configurable per-run tool-call cap is enforced by the gateway. There is no generic metric-snapshot model. | Partial foundation; canonical module services still own approval and writes |
 | Shared specialist directory / workspace | AI Assistant and Action Center exist; no cross-module Specialist Agent Center route was found in the initial route search | Reuse existing surfaces where possible; confirm UX before adding navigation |
 
 ## Agent-by-agent map
@@ -221,14 +221,14 @@ capability is already implemented. It defines no delivery timeline.
 
 All five agents have initial review slices. Inventory also has a bounded, versioned handoff into the
 canonical Procurement approval flow, ending at a draft purchase order (details below). Opt-in daily
-scheduled reviews exist for all five agents. Twenty-two opt-in event-triggered source paths now exist:
+scheduled reviews exist for all five agents. Twenty-five opt-in event-triggered source paths now exist:
 SEO after a successful/partial site audit; Inventory after a canonical low-stock event, an applied
 stock count, a fully received purchase order, a confirmed branch-transfer receipt, or recorded
-wastage; Customer after
+wastage or direct purchase movement; Customer after
 newly-lapsed events (coalesced to one aggregate review per business per UTC day), a newly failed
-delivery, an appointment no-show or cancellation, or a completed POS sale; Commerce after Product
+delivery, an appointment no-show or cancellation, a completed POS sale, or an approved return; Commerce after Product
 Validation, a newly failed delivery, a supplier quote, a final experiment decision, or a
-discrepancy-bearing provider reconciliation; and Finance after a newly saved expense, a completed
+discrepancy-bearing provider reconciliation or completed production work order; and Finance after a newly saved expense, a completed
 order, an approved return, an approved budget revision, a posted manual journal, or an imported bank
 statement.
 Workers revalidate tenant/policy/source state and are idempotent; they do not call AI or apply
@@ -3931,16 +3931,16 @@ the spec; it must not be counted as a release pass.
 | Spec section | Current repository status | Remaining proof/gap |
 | --- | --- | --- |
 | 4–8 Shared architecture, lifecycle, evidence, policies and records | Partial | Shared run/evidence/recommendation/action records, immutable tenant configuration history, AI guardrails, audit, idempotency and tenant scope exist. The typed gateway records redacted calls for Commerce, Inventory, SEO, Finance's canonical P&L and descriptive month-over-month variance, approved-budget/expense comparison, relative cash-flow projection, Xero open-items, Xero bank-transaction status, imported-statement match candidates, period-close readiness, partial manual-journal trial balance, bounded posted manual-journal entries, a partial A/R-A/P source summary and exact-match expense duplicate candidates, and Customer's canonical analytics summary, review context and repeat-visitor preview. Owner-configurable provider/input/output limits, shared and per-agent tool-call ceilings, and a shared material-action cap apply per run; Commerce also has a read-tool ceiling and a per-business write-tool allow-list rechecked before approval execution. Full evidence authorization and approval coverage across every action class remain incomplete. |
-| 9 SEO Autopilot | Partial | Module screens, GSC/GA4/rank evidence, versioned drafts and approval handoffs exist. Backlink authority is unavailable without a provider; full publish confirmation, independent verification and action-linked outcome measurement remain incomplete. |
+| 9 SEO Autopilot | Partial | Module screens, GSC/GA4/rank evidence, versioned drafts and approval handoffs exist. SEO Reports now supports durable, deduplicated rank-outcome snapshots linked to published briefs and applied On-Page/Technical actions when saved observations exist. Backlink authority remains unavailable without a provider; broader source coverage, independent verification and provider-confirmed publication remain incomplete. |
 | 10 Autonomous Commerce | Partial | Canonical Commerce sources, permissioned tools, drafts and some approved actions exist. A bounded order-to-route review is not the spec's multi-domain orchestrator; worker delegation, end-to-end provider confirmation, recovery and measured outcomes are not complete across connectors. |
 | 11 Inventory Intelligence | Partial | Deterministic reorder, history/backtest evidence, Procurement handoff, transfer checks, count/wastage reviews, waitlist preview, and bounded read-only stock-balance, movement-history, recorded-sales-velocity, open-purchase-order and live stock-count-variance tools exist. Forecasts are not accepted as calibrated; seasonal adjustment, stockout-censored demand and complete reservation/in-transit coverage are not established. |
 | 12 Financial Intelligence | Partial | Profit summaries, budgets, manual journals, statement suggestions, Xero status, anomaly cues and close readiness exist. The Finance specialist can read the canonical Profit Analytics statement and descriptive month-over-month comparison, approved-budget versus recorded-expense comparison, relative Cash Flow projection, privacy-minimized Xero open-items and bank-transaction status summaries, imported-statement match candidates, period-close readiness, partial posted-manual-journal trial balance, bounded posted manual-journal entries, a partial receivable/payable aging source summary and exact-match expense duplicate candidates through the shared tool gateway. That aging summary keeps Credit balance age and connected Xero open items separate; customer-credit age is not invoice due-date aging or a finance-owned A/R control account, and the absence of a native Noxtill finance ledger is explicit. Duplicate groups are human-review candidates, not confirmed duplicates, fraud or savings. Xero bank transaction flags are not Noxtill reconciliation; imported match candidates remain suggestions until a human accepts them; the projection is not a bank balance and Xero data remains an external connected-organization summary, not a native Noxtill subledger. A complete finance-owned ledger, authoritative cash balance, A/R and A/P subledgers, full reconciliation and certified close are unavailable in the current source model. |
-| 13 Customer Intelligence & Retention | Partial | Customer reviews, privacy-minimized context, deterministic segment drafts, duplicate review, follow-up tasks and consent-gated message drafts/actions exist. All-channel activity, provider-confirmed delivery and broad post-contact outcome coverage remain incomplete. |
-| 14 Cross-agent boundaries and normalized events | Partial | Tenant-scoped, versioned event references, dedupe/retry and opt-in scheduled/event reviews exist. Twenty-two source paths are currently wired (verified from the 22 policy switches and producer processors); the remaining illustrative event families and material cross-agent action handoffs are not implemented. |
-| 15 Shared and module API contracts | Partial | Shared `GET /agents`, owner-only `GET/PATCH /agents/:agentKey/config` with an allowlisted policy-key set, validation, optimistic config versions and audit history, owner-only `GET /agents/:agentKey/configuration-history`, `GET /agent-actions`, `GET /agent-runs/:id`, redacted `GET /agent-runs/:id/evidence`, and metadata-only cursor-paged `GET /agent-runs/:id/events` expose safe directory/lifecycle metadata; module APIs and canonical actions exist. Action decision endpoints have canonical adapters for Inventory reorder requests (including shared Commerce RFQ sourcing, purchase-order execution and cancellation before conversion), Customer segment actions and Customer event follow-up tasks; broader action-class coverage remains incomplete. The specialist config API is not a replacement UI for the existing Settings screens. |
-| 16 Jobs, idempotency and recovery | Partial | Durable cross-agent review jobs, per-event idempotency/retries and several worker recovery paths exist. Cross-agent material-action orchestration, provider-timeout reconciliation and all action-class cancellation/compensation paths remain incomplete. |
+| 13 Customer Intelligence & Retention | Partial | Customer reviews, privacy-minimized context, deterministic segment drafts, duplicate review, follow-up tasks and consent-gated message drafts/actions exist. Provider-confirmed follow-up delivery is now covered for Customer Agent draft messages only; all-channel activity and broad post-contact outcome coverage remain incomplete. |
+| 14 Cross-agent boundaries and normalized events | Partial | Tenant-scoped, versioned event references, dedupe/retry and opt-in scheduled/event reviews exist. Multiple source paths are wired, including completed-appointment and rescheduled-appointment reviews coalesced to one aggregate run per business per UTC day, plus a privacy-minimized cancelled-order review; the remaining illustrative event families and material cross-agent action handoffs are not implemented. |
+| 15 Shared and module API contracts | Partial | Shared `GET /agents`, owner-only `GET/PATCH /agents/:agentKey/config` with an allowlisted policy-key set, validation, optimistic config versions and audit history, owner-only `GET /agents/:agentKey/configuration-history`, `GET /agent-actions`, `GET /agent-runs/:id`, redacted `GET /agent-runs/:id/evidence`, and metadata-only cursor-paged `GET /agent-runs/:id/events` expose safe directory/lifecycle metadata; run history now hides its detail bundle when a contributing module is disabled. Per-source object authorization and broader action-class coverage remain incomplete. Module APIs and canonical actions exist; action decision endpoints have canonical adapters for Inventory reorder requests (including shared Commerce RFQ sourcing, purchase-order execution and cancellation before conversion), Customer segment actions and Customer event follow-up tasks. The specialist config API is not a replacement UI for the existing Settings screens. |
+| 16 Jobs, idempotency and recovery | Partial | Durable cross-agent review jobs, per-event idempotency/retries and several worker recovery paths exist. A stale executing action now moves to an audited unknown-outcome state for manual canonical-resource review; provider-specific status reconciliation, cross-agent material-action orchestration and all action-class cancellation/compensation paths remain incomplete. |
 | 17 UX and accessibility | Partial | Existing module screens expose evidence, missing-data, approval, failure and partial states; browser journeys cover key QA flows. Keyboard/screen-reader/mobile acceptance has not been completed across all relevant screens. |
-| 18 Security, privacy and compliance | Partial | Tenant isolation, capability gates, consent checks, redaction and audit coverage have real tests. AI Settings now exposes a limited redacted feed of selected saved denial events. Full field-level scope on every cross-module tool, prompt-injection evaluation, comprehensive security-event monitoring and independent security review remain outstanding. |
+| 18 Security, privacy and compliance | Partial | Tenant isolation, capability gates, consent checks, redaction and audit coverage have real tests. Shared AI run-history details are now hidden when a contributing business module is disabled, and AI Settings exposes a limited redacted feed of selected saved denial events. Per-source object-level checks on every cross-module read, prompt-injection evaluation, comprehensive security-event monitoring and independent security review remain outstanding. |
 | 19 Observability, analytics and cost controls | Partial | Persisted usage, caps, run/action summaries, selected latency/denial metrics, redacted monthly budget-limit events, and tenant-scoped queued-run age with an optional owner threshold alert exist. Provider invoices, complete tool/provider latency, live Redis/BullMQ depth, worker health, outcome rates and production alert delivery are not verified. |
 | 20 QA and acceptance | Incomplete | Full backend tests, both type checks, touched-file lint and isolated Playwright journeys pass at current checkpoints. Load/resilience, red-team, broad accessibility, live provider acceptance and complete cross-agent end-to-end journeys remain. |
 | 21–22 Roadmap and definition of done | Not satisfied yet | These sections require the applicable gaps and acceptance gates above to be closed and evidenced; prior passing tests or a complete spec document alone do not satisfy them. |
@@ -5046,3 +5046,750 @@ backend ESLint with existing Prettier-only findings excluded, `git diff --check`
 Jest (**457 suites / 2,906 tests**) pass. No browser surface changed, so browser QA was not needed.
 No provider call, migration, commit or push was made. Native Finance A/R and A/P ledgers, provider
 acceptance and production QA remain incomplete.
+
+## Customer Agent — read-only question flow (2026-11-11)
+
+Added `POST /analytics/customers/agent-questions` and an Ask control to the existing Customer
+Intelligence panel. Each request is saved as a specialist run with only the question SHA-256 in
+`inputRefs`; the raw question is sent to the shared `AiInfraService` but is not copied into the run
+record. The business-wide mode exposes only read-only aggregate tools: analytics summary, canonical
+customer review context, repeat-visitor preview, saved segment rules and CRM data-quality summary.
+The Customer Profile mode adds read-only profile, activity, order, booking, consent, loyalty,
+message-status, follow-up task history, exact-match duplicate candidate evidence, RFM,
+activity-change, follow-up-priority and Credit status tools. Activity includes only
+privacy-permitted note counts and update time, never note content. Credit balance is
+available only when the Credit module is enabled and the authenticated user has Credit manage
+permission; lifetime spend remains permission-checked by Profit view. Credit balance is computed
+from permission-checked, customer-scoped sums by canonical CreditEntry kind instead of loading the
+full ledger into application memory. Its selected customer ID is
+injected server-side and is not sent to the model; only permission-checked, privacy-minimized tool
+results are returned. Both modes bound the question and tool count, use the shared per-agent AI
+budget, record tool outcomes, and audit the answer hash and run. Writes, messages and campaign
+actions are not available in this question flow.
+
+Backend and frontend `tsc --noEmit` pass. Tests and browser QA were not run, per the operator's
+instruction to stop running tests; no provider call or migration was made. The flow is therefore
+implemented but unverified. A bounded `get_customer_segment_rules` tool now reads up to 10 saved
+segment rules, approval state and current live match counts. It omits segment names, customer rows
+personal values in name, email, phone and tag rules, and spend thresholds; malformed saved rules are
+disclosed without attempting a count. The selected-customer question flow also exposes the canonical
+RFM values (with recorded monetary value only when the profile service grants Profit view
+permission), the configured two-window completed-order change cue, the human follow-up cue with
+consent exclusions, and the Credit ledger balance only when Credit manage is granted. These reuse
+`CustomerProfileIntelligenceService.review`; no new score, churn probability or priority number is
+generated. Backend and frontend type checks pass after these additions. Tests and browser QA remain
+intentionally unrun. The five-agent specification remains incomplete; broader cross-agent coverage
+and acceptance checks remain open.
+
+## Customer Agent — opt-in review-received event (2026-11-11)
+
+Customer-linked Noxtill review submissions can now enqueue an opt-in Customer Agent review event.
+The policy defaults off, is configurable by an AI Settings manager, and is rechecked by the worker
+before processing. Queue payloads contain only the business, review-request ID and response
+timestamp; review text and rating values are not placed in the job. The worker re-reads the rated
+source row, rejects stale, erased or anonymous-customer events, and runs the existing aggregate
+Customer review with AI summary disabled. Queue failures are logged without interrupting review
+submission. No schema migration was needed. Tests and browser QA were not run at the operator's
+request; this implementation remains unverified.
+
+## Customer Agent — provider-confirmed message event (2026-11-11)
+
+The existing Meta, Twilio, Telnyx and Resend status webhook processor now emits one optional,
+idempotent Customer Agent event when a Customer Agent follow-up draft first becomes
+provider-confirmed as delivered or read. The producer and worker both restrict the event to the
+Customer Agent draft idempotency namespace, excluding campaign and other CRM messages to prevent
+an event per recipient or unrelated send. The queue carries only business and message IDs; the
+worker re-reads the current provider-confirmed state, rejects erased or missing customer links,
+rechecks module and agent policies, and creates a deterministic aggregate Customer review without
+message content, contact details or an AI summary. The new owner-managed setting defaults off. No schema migration was
+needed. Backend `tsc --noEmit` and `git diff --check` pass after the follow-up-draft scoping
+refinement; tests and browser QA were not run at the operator's request.
+
+## Customer Agent — selected-customer follow-up history tool (2026-11-11)
+
+Added `get_customer_follow_up_history` to the selected-customer read-only question flow. It reads
+canonical CRM task status, priority, due/completion timestamps and staff-recorded outcome for up to
+10 open or recently updated tasks. It omits task titles/reasons, staff identity, customer identity
+and contact details, and message content. Open tasks are included regardless of age; completed or
+other tasks are limited to the trailing 90-day update window. The result explicitly says staff
+outcomes are not proof of contact or provider-confirmed delivery. Customer selection is pinned by
+the server, and the canonical profile read enforces Customer Agent permission, module state and
+erasure checks before task lookup. Backend `tsc --noEmit` and `git diff --check` pass. Tests and
+browser QA were not run at the operator's request; the five-agent specification remains incomplete.
+
+Selected-customer Q&A also exposes the canonical exact-match duplicate detector as
+`get_customer_duplicate_candidates`. It returns match field/method and conflicting field names for
+up to 10 pairs, plus the full candidate count; customer IDs, names, emails, phones and addresses are
+not returned to the model. It does not decide identity or merge records, and directs the operator
+to the canonical CRM duplicate review. The duplicate tool uses the same pinned customer and
+authenticated business scope as other profile reads. Backend/frontend `tsc --noEmit` and
+`git diff --check` pass; tests and browser QA remain unrun at the operator's request.
+
+Customer Agent question responses now request explicit Answer, Evidence, Calculation,
+Assumptions/gaps and evidence-coverage Confidence sections. Both customer Q&A surfaces display each
+successful source tool's summary and a link to its canonical screen, in addition to the answer.
+Confidence is described as evidence coverage rather than a calibrated probability. This has no new
+data source and does not change the read-only boundary.
+
+## SEO Agent — saved rank-history evidence in workspace review (2026-11-11)
+
+The SEO Agent review now reads the current business's latest two saved
+`KeywordRankSnapshot` rows for tracked keywords through a registered read-only tool. It records
+latest/prior positions, comparison movement, checked time, seven-day freshness, and Google Trends
+search interest when present. A missing check is distinct from a keyword checked but absent from
+results; neither is treated as rank zero. The workspace shows a bounded rank table and links to
+canonical Rank Tracking. The agent text and UI explicitly state that positions are observations,
+not causal proof or a guarantee, and Trends values are relative 0–100 indices, not monthly search
+volume. No external provider call, schema change or migration was needed.
+
+Backend/frontend `tsc --noEmit` and `git diff --check` pass. Tests and browser QA were not run, as
+requested. This adds rank-history coverage to the SEO review but does not implement linked
+before/after outcome snapshots or independent publication confirmation; the five-agent spec remains
+incomplete.
+
+SEO Reports now also lists up to 100 recently published briefs in the selected period with their
+recorded publish-time keyword rank and the latest saved rank check after publication. The row shows
+missing keyword/baseline/check and not-in-results states separately, along with crawl confirmation
+of the URL. This uses existing `SeoContentBrief.baselineRank`, `publishedAt`, `liveConfirmedAt`,
+and `KeywordRankSnapshot` rows; the overall published-content metric remains uncapped. It is a
+site-level keyword observation, not the published URL's exact position and not a causal estimate.
+No schema or migration was needed. Backend/frontend `tsc --noEmit` and `git diff --check` pass;
+tests and browser QA remain intentionally unrun. Outcome snapshots for all SEO action types and
+independent publish-provider confirmation remain incomplete.
+
+The same Reports surface also compares rank observations around up to 100 applied On-Page and
+Technical changes when an existing tracked keyword maps to the saved primary keyword or exact target
+URL. It uses the latest observation on/before the merchant-recorded application date and the latest
+saved observation after it; crawl verification is displayed separately. Unmapped changes and
+missing observations remain visible as incomplete states. These are site-level keyword observations,
+not target-page positions or causal results. This is a live report read model, not a durable
+outcome-snapshot record; the spec's persisted action-linked snapshot lifecycle remains open. Tests
+and browser QA were not run, as requested. Backend/frontend `tsc --noEmit` and `git diff --check`
+pass after these report changes.
+
+## SEO Agent — durable outcome snapshots (2026-11-11)
+
+Added an owner/manager-gated `POST /seo-autopilot/reports/outcome-snapshots` action. It copies only
+saved post-publication or post-application tracked-keyword observations into an immutable,
+tenant-scoped `SeoOutcomeSnapshot` record. Repeated capture is safe: a deterministic observation
+key deduplicates the same action, baseline and measured rank-check pair, while a later rank check
+can create a separate snapshot. Each capture attempt writes an audit-log summary. SEO Reports now
+shows the saved snapshots and their timestamps alongside the source observations. Snapshot evidence
+is site-level rank history; it does not establish exact target-page position or causation.
+
+Added and applied the hand-written MySQL migration `20261111120000_seo_outcome_snapshots` locally;
+the foreign key to `businesses.id` was verified through `information_schema`, Prisma Client was
+regenerated, and `prisma migrate status` reports the schema up to date. Backend and frontend
+`tsc --noEmit`, targeted ESLint and `git diff --check` pass. Tests and browser QA were not run at the
+operator's request. No commit or push was made.
+
+## Inventory forecast display correction (2026-11-12)
+
+The demand-forecast table no longer presents a sales-frequency threshold as a confidence score.
+It shows the actual count of recorded sale movements returned for each product and states that
+this is a history count, not calibrated confidence. Copy identifies the canonical trailing 30-day
+velocity window, discloses that seasonality is not modeled and that attempted purchases during
+stockouts are not recorded, and no longer claims that several weeks of history are required. The
+view also surfaces saved empirical backtest ranges and holdout measures from the latest completed
+Inventory Agent run when the existing backend has them; insufficient history remains explicitly
+unavailable. This does not add a new forecast model or stockout-censored demand data. No tests or
+browser QA were run, per instruction.
+
+## Customer Agent — appointment completion event (2026-11-12)
+
+Completing an appointment can now enqueue an opt-in Customer Agent review. The owner-managed policy
+defaults off; the queue payload contains only business ID, appointment ID and the completion
+timestamp. The worker rechecks module/policy state, current appointment status and timestamp, and
+customer erasure before running. Multiple completed appointments are coalesced to one
+privacy-minimized aggregate review per business per UTC day. The path creates no message or other
+customer-facing action. No schema migration was needed. Tests and browser QA were not run, per
+instruction.
+
+## Specialist operations disclosure correction (2026-11-12)
+
+AI Settings' telemetry disclosures now distinguish Commerce-specific registry duration from the
+shared registered-tool execution records. The gateway coverage statement now includes Inventory,
+Finance, Customer, SEO and Commerce, matching the current registered providers. The copy still
+states that counts are not complete source-read coverage, invoices or comprehensive security
+monitoring. No behavior or data calculation changed; no tests were run, per instruction.
+
+## Specialist run-start timeline events (2026-11-12)
+
+Directly executed Commerce, Customer, Inventory, Finance and SEO specialist runs now persist an
+`agent.run.started` metadata event in the same transaction as run creation, timestamped from the
+saved `startedAt` field. Queued orchestration
+continues to record its existing `agent.run.worker_started` event at actual worker pickup, rather
+than at enqueue time. Older direct run timelines materialize a start event from the saved
+`startedAt`; orchestration parent rows are excluded to avoid representing enqueue time as execution.
+AI Settings renders run, action, worker and tool lifecycle event names as readable labels. The
+start event contains only run status and trigger type; it does not copy prompts, outputs or customer
+data. Arbitrary intermediate run-state transitions remain uncaptured. No migration was needed.
+Tests and browser QA were not run, per instruction.
+
+## Specialist material-action approval expiry (2026-11-12)
+
+New material actions that enter the shared approval queue receive a saved expiry deadline from
+the owner-configured `agents.specialistActionApprovalTtlDays` policy (default seven days, bounded
+from one to ninety). The deadline is pinned to the action when approval is requested; a later
+policy change does not silently extend an existing approval. A recurring worker expires due
+actions with an append-only `approval_expired` event, and the read/decision routes also process
+expired items so stale approvals cannot be accepted while waiting for the next worker tick. The
+AI Settings action audit and CSV expose the saved deadline; the page disables approve/reject/cancel
+controls after the deadline. No canonical action is auto-executed by expiry.
+
+Added a nullable deadline column and an index for pending-expiry scans. Existing pending specialist
+actions receive a seven-day grace window when the migration is applied. Tests and browser QA were
+not run at the operator's instruction.
+
+## Finance Agent — current-month budget run-rate estimate (2026-11-12)
+
+Added the Finance specification's `calculate_budget_forecast` read-only tool. For the current UTC
+month only, it calculates a transparent straight-line estimate from recorded Expense rows to the
+month end and compares each exact business/category against its highest-version approved
+`FinanceBudget`. It keeps businesses and currencies explicit, returns actual month-to-date values
+beside the estimate, and states that unrecorded expenses, future revenue, cash settlement and
+scheduled receivables/payables are not included. Completed months continue to use the existing
+actuals tool; no invented schedules or future transactions are added. No schema migration was
+needed. Tests, type checks, lint and browser QA were not run, per instruction.
+
+## Finance Agent — source-event status tool (2026-11-12)
+
+Registered the Finance specification's `get_source_event_status` read-only tool in the shared
+specialist gateway. It reuses `FinancePeriodCloseService.readiness` and returns the selected
+month's source-backed sales/order, expense/receipt-evidence, pending-return, Xero sync,
+manual-journal and imported-statement review statuses, with the existing branch scope and
+currency boundaries. It does not create a second finance read model or treat missing evidence,
+unsynced orders or unmatched statement rows as proof of an invalid transaction. The existing
+disclosure for unavailable native reconciliation and certified close is preserved. No migration
+was needed. Tests, type checks, lint and browser QA were not run, per instruction.
+
+## Finance Agent — read-only question flow (2026-11-12)
+
+Added `POST /profit/agent-questions` and a question panel on Profit Overview. The endpoint requires
+the Finance Agent capability and active-agent policy, stores only a hash of the question in run
+metadata, and passes only registered read-only Finance tool schemas to `AiInfraService`. Tool calls
+are bounded by the per-agent call limit, re-authorized by the gateway, recorded in the shared tool
+ledger and displayed with canonical-screen links. If the provider requests a write or returns no
+successful source evidence, the flow does not produce an answer. It cannot post journals, reconcile,
+close periods, or move money. No migration was needed. Tests, type checks, lint and browser QA were
+not run, per instruction.
+
+## Finance Agent — deterministic period-close review ordering (2026-11-12)
+
+Registered `prioritize_close_exceptions` through the Finance read-only tool gateway. It reuses
+`FinancePeriodCloseService.readiness` and arranges available posting-lock, journal-balance,
+statement-review, unresolved-journal, Xero-sync, receipt-evidence, pending-return and open-order cues
+in a fixed review sequence per business and currency. Each item names its source field and explains
+what the count does and does not establish. The sequence is explicitly not a severity or monetary
+materiality score; disconnected Xero status is listed as not evaluated, never zero. The read-only
+tool changes no finance or canonical order records. No migration was needed. Tests, type checks,
+lint and browser QA were not run, per instruction.
+
+The same deterministic ordering now appears in the saved Finance Agent review output and its
+evidence record, and Profit Overview lists the cues with links to the canonical finance, orders,
+expenses or integrations screen. Older runs disclose that this detail was not saved. No new source
+formula or table was added. Tests, type checks, lint and browser QA were not run, per instruction.
+
+Finance question responses are withheld unless the model returns all five required sections:
+Answer, Evidence, Calculation, Assumptions and gaps, and Confidence. An incomplete response remains
+unavailable while successful source-tool traces stay visible. This checks response structure only;
+it does not establish factual correctness or calibrated confidence. Tests and other checks remain
+unrun at the operator's instruction.
+
+## SEO Reports — page-path GA4 action context (2026-11-12)
+
+Applied On-Page and Technical SEO actions now include the selected property's saved GA4 Organic
+Search landing-page rows when the action URL's path exactly matches a returned landing-page path.
+Query strings are ignored; invalid action URLs, missing snapshots and unmatched paths are explicitly
+reported without estimating traffic. The report shows the property's saved comparison/current
+periods, returned sessions, key events and reported revenue, with the GA4 currency where present.
+These are property-period observations, not action-timed outcomes, Noxtill order reconciliation or
+evidence of causation. No schema migration or new formula was added. Tests, type checks, lint and
+browser QA were not run at the operator's instruction.
+
+## SEO Agent — grouped crawl finding read (2026-11-12)
+
+Registered `get_crawl_findings` as a bounded, read-only SEO Agent tool. It returns the latest saved
+completed/partial crawl summary and open audit issue counts grouped by canonical issue type and
+severity. It deliberately excludes raw evidence and individual affected URLs from model context.
+The disclosure distinguishes saved crawler results from Search Console index confirmation and
+states partial crawl coverage limitations. It reuses `SeoAuditRun` and `SeoAuditIssue`; no new
+record, formula, migration or provider call was added. Tests, type checks, lint and browser QA were
+not run at the operator's instruction.
+
+The SEO Agent also has a bounded `get_seo_action_outcomes` read tool. It reuses the Reports service
+to expose recent saved tracked-rank observations and exact-path GA4 comparison/current rows for
+applied On-Page and Technical actions. It omits full target URLs/query strings, caps the returned
+actions and GA4 path variants, and preserves the report's non-causal attribution disclosure. No
+write, model, migration or provider request was added. Tests, type checks, lint and browser QA remain
+unrun at the operator's instruction.
+
+Registered `get_competitor_seo_evidence` as a tenant-scoped read-only aggregate. It reports the
+number of tracked competitors, team-entered observation counts by kind/status and latest observed
+date, while excluding user-entered notes and URLs from model context. It retains the disclosure
+that competitor evidence is not automatically discovered or verified and does not provide
+authority, backlink, traffic or keyword-coverage metrics. It reuses existing records and adds no
+migration. Tests and other checks were not run at the operator's instruction.
+
+Registered `get_seo_settings` through the canonical `SeoSettingsService.summary` read. The tool
+exposes site/market, audit schedule, draft policy and integration-readiness information, while the
+service returns configuration status rather than provider credentials. It adds no independent
+settings store or migration. Tests and other checks were not run at the operator's instruction.
+
+These four bounded reads are now part of each saved SEO Agent review as well as available to its
+read-only question tools. The run stores grouped crawl, action-outcome, competitor and configuration
+evidence with source field references, freshness/source labels and calculation disclosures. Its
+summary reports crawl coverage, manual competitor evidence, GA4 path matches and readiness-check
+counts without treating any of them as causal search impact. SEO Agent version is now `1.1.0` for
+this evidence-contract change. No checks were run at the operator's instruction.
+
+## SEO Agent — question over saved review evidence (2026-11-12)
+
+The SEO Agent workspace accepts a bounded question with a review run. It answers from the same
+tenant-scoped saved SEO evidence snapshot: queue, Search Console, GA4, rank history, crawl findings,
+applied-action observations, team-entered competitor/off-page records and settings status. The
+question is hashed in run metadata and is not stored as plain text. Answers are withheld unless
+the provider returns Answer, Evidence, Calculation, Assumptions and gaps, and Confidence sections.
+This is a read-only evidence explanation; it does not approve changes, publish website edits or
+infer causal impact. The SEO agent configuration version was `1.2.0` at this checkpoint. Tests, type checks, lint
+and browser QA were not run at the operator's instruction.
+
+## Customer Agent — channel status review context (2026-11-12)
+
+The existing business-wide journey summary now groups tenant-scoped canonical CRM-linked Message
+rows created in the trailing 90 days by channel and current status, alongside appointment and
+support-ticket aggregates. It excludes erased profiles and requires the related CRM customer to
+belong to the same business. Delivered/read are provider-confirmed; queued/sent remain unconfirmed.
+The Customer Insights view and saved Customer Agent evidence expose these aggregate counts. Messages
+have no branch association, so the selected-branch review says this data is unavailable. Unified
+Inbox/social records still cannot be attributed because the schema does not link them to CRM
+customers. No migration was needed. Tests, type checks, lint and browser QA were not run at the
+operator's instruction.
+
+## Inventory Agent — question over saved review evidence (2026-11-12)
+
+Inventory Intelligence now accepts a bounded read-only question in the existing review flow. The
+answer uses that run's saved findings, formulas, calculations and selected real evidence fields,
+with IDs, references, contact fields and monetary fields removed from the AI context. Inventory
+valuation remains in the deterministic page output and is excluded from question evidence. The
+evidence snapshot is bounded to eight findings and a shared 16 KB evidence-value budget, with
+per-field length limits; omitted findings, text truncation and evidence-budget exhaustion are
+flagged to the model so it abstains rather than inferring from omitted data. The agent is now
+version 1.14.0.
+The prompt is hashed in run metadata and not stored as plain text; the frontend discloses that it is
+sent to the configured AI provider. Answers are withheld unless all five Answer, Evidence,
+Calculation, Assumptions and gaps, and Confidence sections are present. No migration was needed.
+Tests, type checks, lint and browser QA were not run at the operator's instruction.
+
+## Inventory Agent — supplier terms and transfer constraints tools (2026-11-12)
+
+Registered two bounded read-only Inventory Agent tools. `get_supplier_terms` reads only active,
+effective, confirmed supplier contracts scoped to the current business and returns operational
+minimum-order, category, validity and renewal fields; it omits prices, payment terms, documents and
+free-form contract notes. Supplier terms and purchase orders are part of the selectable Inventory
+module; there is no separate Procurement module switch. Branch comparison is rejected server-side
+when the Branches module is disabled for the business. `get_branch_transfer_rules`
+reports the active location count for the current branch group and the validations enforced by
+`StockTransfersService`, while explicitly disclosing that there is no separate tenant-configurable
+transfer-rule record. Neither tool creates or approves inventory or procurement records. No
+migration was needed. Tests, type checks, lint and browser QA were not run at the operator's
+instruction.
+
+Inventory review respects business module selection when calculating reorder supply and building
+specialist context: open purchase orders and supplier contract/lead-time evidence are Inventory data
+and are included while the Inventory Agent is enabled; branch transfer quantities and rebalance
+evidence are only read when Branches is enabled; back-in-stock waitlist aggregates are only read
+when Customers is enabled. The saved run records which modules supplied evidence, and the Reorder
+Suggestions view labels branch comparison unavailable when Branches is disabled. The canonical
+Inventory UI keeps its existing default behavior. No migration was needed. Tests, type checks, lint
+and browser QA were not run at the operator's instruction.
+
+The saved reorder and branch-transfer follow-through endpoints now apply live module selection
+before reading cross-location transfer records. When Branches is disabled, the API returns no
+branch-transfer outcome rows and the Inventory view labels that section unavailable instead of
+showing an empty state. Supplier and purchase-order outcome records remain part of Inventory and
+are read only while the Inventory module is enabled. Branch outcome reads also constrain saved
+branch IDs to the current active branch group and use canonical business/product names rather than
+trusting descriptive names stored in recommendation evidence. Tests, type checks, lint and browser
+QA were not run at the operator's instruction.
+
+## Five-agent answers — evidence-section enforcement (2026-11-12)
+
+Added one shared server-side answer validator for SEO, Commerce, Inventory, Finance and Customer
+question flows. It withholds answers unless Answer, Evidence, Calculation, Assumptions and gaps,
+and Confidence appear in order and every section contains text. The Customer and Commerce prompts
+now require that contract; Commerce also refuses to save an answer if no registered read tool
+succeeded, so a provider's first unsupported free-form response cannot be treated as grounded.
+Customer and Commerce validate again after applying the persisted-answer length limit. The
+validator checks structure, not factual correctness. Each affected agent version was advanced so
+new runs identify the updated response contract. Inventory valuation summaries are explicitly
+excluded from the Inventory question context; the existing deterministic page valuation remains.
+No migration was needed. Tests, type checks, lint and browser QA were not run at the operator's
+instruction.
+
+## Customer Agent — selected-customer answer erasure (2026-11-12)
+
+Customer erasure now finds selected-customer read-only question runs by the same one-way selected-ID
+hash already stored in run metadata. It clears the saved answer and question reference, and deletes
+that run's tool-call and evidence rows while retaining the non-content lifecycle record and usage
+ledger. A selected-customer question also locks and rechecks the canonical customer row before its
+answer is saved; if erasure won the race, the answer and tool evidence are discarded. Aggregate
+Customer Agent runs remain intact because they do not identify a selected profile. Tests, type
+checks, lint and browser QA were not run at the operator's instruction.
+
+## Commerce Agent — source-module enforcement (2026-11-12)
+
+Commerce Agent registry entries and execution now respect the business's live module selection.
+Commerce tools require Autonomous Commerce; tools that read canonical Products, Inventory or
+Orders data also require those modules. Supplier, purchase-order and quote records are covered by
+Inventory because Procurement is not a selectable top-level business module in the current module
+registry. Disabled tools expose the blocking reason, and new refusals are saved with an audit row.
+Approval requests are rechecked when approved and again immediately before canonical execution;
+turning off a required module refuses pending work and suppresses replayed result data. Tests, type
+checks, lint and browser QA were not run at the operator's instruction.
+
+## Inventory Agent — purchasing data follows Inventory module selection (2026-11-12)
+
+Removed checks for a separate Procurement selection from Inventory Agent supplier-term, open-purchase,
+reorder and follow-through reads. Procurement is not present in the selectable top-level
+`BUSINESS_MODULES` registry; purchasing and supplier data are currently part of Inventory, whose
+agent access is already checked. Branch transfer and Customer waitlist data remain gated by their
+actual Branches and Customers switches. The Reorder Suggestions run now identifies purchasing as an
+included Inventory source instead of implying a Procurement toggle exists. Tests, type checks, lint
+and browser QA were not run at the operator's instruction.
+
+## Customer Agent — Reviews and Unified Inbox module selection (2026-11-12)
+
+The Customer Agent aggregate review now skips customer-linked ReviewRequest queries when Reviews is
+disabled and omits those figures from the saved snapshot with an explicit module-disabled state.
+The customer-journey summary skips Appointment queries when Bookings is disabled and canonical
+Message queries plus follow-up delivery aggregation when Unified Inbox is disabled. Support-ticket
+aggregates remain available as Customers data. Responses label partial source coverage rather than
+representing disabled sources as zero. The shared Analytics summary keeps its existing behavior for
+normal callers; the specialist agent opts out of review queries through an optional source selection.
+The Customer Agent version is now `1.3.0` for this saved-evidence contract change.
+Tests, type checks, lint and browser QA were not run at the operator's instruction.
+
+The Customer Agent's question tool now requests only customer counts, the existing retention fields
+and permitted customer-linked review aggregates from the shared Analytics summary. For this caller,
+the summary query does not select customer lifetime-spend fields or calculate spend distributions;
+normal Analytics callers keep the existing default summary. The tool no longer passes finance
+aggregates to the model, and its registered description states this boundary. No provider call or
+schema change was made. Customer Agent run history also hides saved output, recommendations and
+evidence when Reviews, Bookings or Unified Inbox is currently disabled, preventing earlier snapshots
+from continuing to expose those source aggregates. Tests and other checks remain unrun at the
+operator's instruction.
+
+## Commerce Agent — live source selection in saved reviews (2026-11-14)
+
+Commerce Agent reviews now skip optional source queries when their canonical modules are disabled,
+record the skipped reason, and mark coverage/run status as partial instead of treating omitted
+sources as empty. Evidence now marks successful no-record queries as observed database records,
+separate from failed or skipped queries. Commerce run history hides saved details and recommendations
+when a contributing source module is disabled. The UI explains skipped sources. No tests, type
+checks, lint, browser QA, migration or provider calls were run at the operator's instruction.
+
+## Shared run ledger — module-selection redaction (2026-11-14)
+
+The owner-only cross-module AI Settings run ledger now checks current module selection before
+returning run counts, evidence references, tool output resource IDs or lifecycle events. If a source
+module used by that agent is disabled, the shared endpoints return metadata only, zero related-detail
+counts and a clear redaction reason; the UI disables the detail controls and labels the hidden state.
+This complements the canonical agent-history redaction and does not delete saved records. The source
+module list is conservative per agent. No tests, type checks, lint, browser QA or provider calls were
+run at the operator's instruction.
+
+## Finance Agent — branch module selection at scope boundaries (2026-11-14)
+
+Finance statement runs now reject an explicitly selected branch or all-branches scope when the
+business has disabled Branches, while retaining current-business-only reads. Snapshots record when
+their results actually included a branch scope, so history redacts those saved results if Branches
+is later disabled; legacy snapshots use the conservative source list. Finance question tools
+recheck the live Branches selection immediately before execution when their input requests a
+non-current branch scope. The check uses the root business module selection for branch businesses.
+No migration was needed. Tests, type checks, lint and browser QA were not run at the operator's
+instruction.
+
+## Inventory Agent — branch-only tool source gate (2026-11-14)
+
+The branch transfer-constraints and branch-rebalance tools now declare Branches as a required
+source module in the shared tool registry. The gateway rechecks that selection at invocation and
+again immediately before the handler, so a disabled or newly disabled Branches module cannot be
+read through these explicit branch tools. Inventory runs that return partial branch availability
+continue to use their existing module-aware disclosures. No migration was needed. Tests, type checks,
+lint and browser QA were not run at the operator's instruction.
+
+## Customer Agent — selected-branch module guard (2026-11-14)
+
+Customer Intelligence runs and registered aggregate tools now require a valid scope shape and reject
+selected-branch reads when Branches is disabled. Current-business summaries cannot smuggle a
+branch ID into the branch-scoped Analytics query. New selected-branch snapshots record Branches as a
+source so their saved results are hidden if the module is later turned off; legacy snapshots use a
+conservative source fallback. Appointment, support-ticket and Message counts remain honestly
+unavailable for selected branches because those records lack branch association. No migration was
+needed. Tests, type checks, lint and browser QA were not run at the operator's instruction.
+
+## Inventory Agent — Products source module gate (2026-11-14)
+
+The Inventory Agent's product-level run now refuses with a typed module-disabled error when Products
+is off. Product-specific read tools declare Products in the shared gateway, with branch rebalance
+also requiring Branches. New snapshots record Products as a source; history hides the complete
+product-evidence bundle while Products is disabled, and the legacy fallback includes Products for
+older snapshots. Supplier and purchase-order records remain within the Inventory module because the
+business module catalog has no separate Procurement toggle. No migration was needed. Tests, type
+checks, lint and browser QA were not run at the operator's instruction.
+
+## Specialist actions — current source-selection enforcement (2026-11-14)
+
+New specialist review snapshots record a versioned `moduleSources` map for the modules available to
+each run. The shared run ledger and canonical module histories use those saved selections to redact
+only runs that included a module now turned off; older snapshots use a conservative per-agent source
+list. AI Settings' material-action audit and the shared action list/get endpoints now hide canonical
+resource IDs, operation IDs, reasons and timeline events when the originating run used a disabled
+source. The UI labels the hidden state and disables approvals and execution actions. The server
+rechecks the originating run's source modules before approval, execution or Inventory-to-RFQ
+sourcing; reject/cancel remain available for safely closing pending work. This does not replace
+canonical module-level authorization on each resource. No migration was needed. Tests, type checks,
+lint and browser QA were not run at the operator's instruction.
+
+## Shared tool gateway — live agent-module selection check (2026-11-14)
+
+The registered specialist tool gateway checks the owning agent module and each tool's declared
+`requiredModules` through the shared `BusinessModulesService` before reserving a call and checks again
+after reservation, immediately before the domain handler. A module disabled during that interval
+therefore fails closed and is recorded as a refused call. This closes the gap where a long-running
+review could continue calling a tool after its agent or explicitly required source module was turned
+off. Finance read tools declare their
+source requirements from the existing source map; SEO Search Console and GA4 tools require the
+Integrations module. A refused call is recorded with a safe authorization marker and typed module
+error; infrastructure failures remain failed calls rather than being mislabeled as policy refusals.
+Branch businesses use the root business selection through the shared module service. Optional
+constructor injection keeps direct service construction on the same implementation. Sources designed
+to return partial data still rely on their canonical service checks. No migration was needed. Tests,
+type checks, lint and browser QA were not run at the operator's instruction.
+
+## Customer Agent — Profit module selection for profile spend (2026-11-14)
+
+The shared Customer profile intelligence projection now skips the `Customer.lifetimeSpend` query
+when Profit & Analytics is disabled, even for a user who otherwise has Profit view permission. The
+RFM and profile summaries return a `module_disabled` state, and the profile UI says the value is not
+available rather than showing a restricted state or a stale amount. This also keeps Customer Agent
+order summaries from including order totals because they derive amount access from the same profile
+projection. Legacy Customer Agent snapshots now conservatively include Profit, Credit and Phone
+Receptionist in the source-module fallback, covering older selected-customer answers that predate
+versioned `moduleSources`. No migration was needed. Tests, type checks, lint and browser QA were not
+run at the operator's instruction.
+
+## Commerce Agent — source gates declared in the shared tool gateway (2026-11-14)
+
+The Commerce tool registry now copies its existing per-tool source-module map into each registered
+tool's `requiredModules` contract. The shared specialist gateway therefore enforces the same source
+selection before call reservation and again immediately before execution, while the existing
+Commerce canonical-service check remains in place for callers outside that gateway. No migration was
+needed. Tests, type checks, lint and browser QA were not run at the operator's instruction.
+
+## Finance Agent — manual-journal source gates (2026-11-14)
+
+The Finance trial-balance and posted-manual-journal read tools now declare Profit & Analytics as a
+required source in the shared tool registry. Turning off Profit & Analytics between agent planning
+and tool execution therefore blocks both the tool schema and the server-side handler boundary.
+The separate receivable/payable source tool remains partial and continues to report Credit and Xero
+availability independently. No migration was needed. Tests, type checks, lint and browser QA were
+not run at the operator's instruction.
+
+## Read-only agent answers — recheck source modules around final AI response (2026-11-14)
+
+Commerce, Customer and Finance question flows now recheck the owning agent module and every source
+module required by successful read tools immediately before the final answer-generation request and
+again after the provider returns and immediately before the answer is persisted. If a required
+module was disabled while the answer was being generated or prepared for storage, the flow refuses
+to save or return that answer. This complements the gateway's checks before and after tool
+execution; it does not cancel a provider request already in flight. No schema change was needed.
+Tests, type checks, lint, browser QA and provider calls were not run at the operator's instruction.
+
+The same before-and-after source-selection check now covers saved-evidence SEO and Inventory
+answers, plus the aggregate AI explanations for all five specialists. Each explanation supplies
+the exact included modules for its snapshot; a module disabled during generation causes the run to
+fail closed rather than saving or returning source-backed content under stale selection metadata.
+Aggregate reviews also repeat the selected-module check immediately before writing their
+source-backed snapshot and recommendations. The final check locks the agent policy row and the root
+business module-selection row in the same MySQL transaction as the answer or review write, so a
+concurrent Settings change serializes before or after that persistence. Single-module Settings
+updates take that same row lock and calculate their update from the locked value, so concurrent
+toggles do not overwrite one another. No schema change was needed. Tests, type checks, lint, browser
+QA and provider calls were not run at the operator's instruction.
+
+## Specialist actions — final canonical-write source recheck (2026-11-14)
+
+Inventory-to-Commerce RFQ sourcing now rechecks the originating run's selected source modules
+and the agent's own module immediately before creating the shared RFQ, in addition to the initial
+review-time check. The same combined check now guards approvals and executions for Inventory and
+Customer actions at the canonical mutation boundary. If either module is disabled after queueing,
+the action fails closed instead of proceeding under stale authorization; RFQ retries use the
+existing failure path. Reject and cancel remain available to close pending work safely. No schema
+change was needed.
+Tests, type checks, lint, browser QA and provider calls were not run at the operator's instruction.
+
+Agent or source-module refusals for an owner approval or execution attempt also write a
+tenant-scoped `AuditLog` record with the agent, action type and typed denial reason. The audit
+entry excludes source data, prompt contents and provider output. Attempts to decide or cancel an
+action ID owned by another business use the same non-disclosing not-found response as an unknown ID
+and write a requesting-business audit record containing only the operation and denial marker.
+
+The owner-facing AI operations summary now counts and lists these specialist-action security
+denials, and raises a critical alert for cross-business action-ID probes plus a warning when an
+action is refused because its agent or a required source module is disabled. The all-modules
+Settings save now locks the root business row, matching the single-module toggle and final
+answer/review persistence paths so concurrent selection updates serialize instead of overwriting
+one another. Changed selections also write a tenant-rooted audit entry with before/after disabled
+module keys, while no-op saves do not add audit noise. No migration was needed. Tests, type checks,
+lint and browser QA remain unrun at the user's instruction.
+
+## Shared specialist tool gateway — revalidate initiating-user permission (2026-11-14)
+
+Before invoking a specialist domain tool, the shared gateway now re-reads the initiating user's
+active business or parent-business membership and resolves the current live capability for that
+agent. This applies to durable user-started runs after queue delays and permission changes; a
+revoked membership or agent-run capability fails closed with a typed error. System-triggered work
+with no initiating user remains governed by the current agent and module policy checks. The check
+runs immediately before the handler, after module-selection revalidation. No schema change was
+needed. Tests, type checks, lint, browser QA and provider calls were not run at the user's
+instruction.
+
+## Cross-agent orchestration — revalidate queued owner membership (2026-11-14)
+
+The durable cross-agent review worker now rechecks that its initiating user still has an active
+owner membership in the business or its parent and that the business remains active before worker
+pickup and again before each child specialist starts. If access was revoked or the business was
+deactivated while the job was waiting or between child reviews, the parent and unfinished child
+records finish through the existing typed failure path instead of continuing under stale access.
+Database specs cover both queued revocation cases. No migration was needed. Tests, type checks, lint,
+browser QA and provider calls were not run at the user's instruction.
+
+## Customer Agent — opt-in review after appointment rescheduling (2026-11-14)
+
+Staff or customer self-service rescheduling that changes the appointment time or assigned staff can
+now queue a daily, aggregate Customer review when its owner-managed policy is enabled. The worker rechecks that the
+business, Customer and Bookings modules remain active, the exact appointment update is still current,
+the booking is still active, and its linked customer has not been erased. Queue payloads contain only
+the business, appointment and update timestamp; the daily idempotency key coalesces reschedule bursts.
+The review is read-only, does not infer why the appointment changed and does not contact the customer.
+No migration was needed. Tests, type checks, lint, browser QA and provider calls were not run at the
+operator's instruction.
+
+The orchestration service also enforces active-owner membership itself on start, retry and cancel,
+so internal callers cannot bypass the controller's owner check. The MySQL spec now includes direct
+service admission without owner membership. No migration was needed. Checks remain unrun at the
+user's instruction.
+
+## Specialist schedules and event reviews — skip inactive businesses (2026-11-14)
+
+The daily schedule selector now excludes inactive businesses before evaluating opt-in review
+policies. Event workers also check that the business is active before resolving a retry attempt, so
+a stale queued event cannot start a new specialist review after deactivation. MySQL regression
+fixtures cover both paths. No migration was needed. Tests, type checks, lint, browser QA and provider
+calls were not run at the user's instruction.
+
+The authorization refusal also writes a metadata-only tenant audit record; AI Settings now counts
+it, includes it in the redacted security-denial feed and raises a warning when queued reviews are
+stopped for revoked access or business deactivation. The operations summary does not expose source
+records or error payloads. No migration was needed. Tests, type checks, lint, browser QA and provider
+calls were not run at the user's instruction.
+
+## Specialist tool execution — refuse inactive businesses and audit revoked actors (2026-11-14)
+
+The shared tool gateway now rechecks that the business is active before reserving source access,
+immediately before invoking a specialist handler, and after the handler returns. The five-agent
+question flows also recheck business activation before returning source-backed results and inside
+the transaction that persists them. This prevents queued system or user work from continuing to
+read or save answers after the business is deactivated. When a queued user no longer has the live
+agent capability or active membership, the gateway records a metadata-only tenant audit event;
+AI Settings counts and lists this refusal and raises a warning. The audit excludes source inputs,
+provider output and customer data. User-started Commerce, Customer, Finance, Inventory and SEO
+answer/review flows revalidate the initiating actor before the first AI request, before returning
+source-backed results and before persistence. The business activation row is locked during final
+answer persistence so deactivation serializes before or after that write. No migration was needed.
+Tests, type checks, lint, browser QA and provider calls were not run at the user's instruction.
+
+## Specialist actions — reconcile long-running executions without blind retry (2026-11-14)
+
+The approval-expiry worker also checks each active business for canonical specialist actions that
+remain in `executing` beyond the owner-configured `agents.specialistActionStaleExecutionMinutes`
+setting (default 60 minutes, allowed 15–1440). A stale action is atomically moved to `needs_review`
+only if it is still executing and its `updatedAt` is still older than the cutoff. The transition
+records an append-only lifecycle event and a metadata-only audit record, with a typed error code and
+copy explaining that the provider outcome is unknown. It never retries the operation or claims
+success; the owner must reconcile the canonical resource before deciding whether to retry. The
+setting is exposed in AI Settings. Owners can close the unknown-outcome review only with a reason;
+the UI and audit explicitly retain `providerConfirmed: false` and do not mark the action successful.
+A real-MySQL regression spec was added for stale versus recent executions and the audited manual
+closure, but tests, type checks, lint, browser QA and provider calls were not run at the user's
+instruction.
+
+## Specialist actions — stale verification moves to human review (2026-11-14)
+
+The existing recurring action-expiry worker now also moves actions that remain in `verification_pending`
+beyond the owner-configured `agents.specialistActionStaleVerificationMinutes` setting (default 60
+minutes, allowed 15–1440) to `needs_review`. The compare-and-set transition records an append-only
+verification-specific lifecycle event and a metadata-only audit entry with `providerConfirmed: false`.
+AI Settings labels the lifecycle event as an unknown verification outcome requiring review, counts
+currently open unknown-verification actions separately from verified/failed share calculations and
+raises a distinct operations alert. Resolved historical unknown events do not remain in the open
+count. Owners can close either stale-execution or stale-verification review
+with a required reason after checking the canonical resource; the close event explicitly retains
+`providerConfirmed: false` and `verificationConfirmed: false`, and never changes the action to a
+successful or verified state. The automatic transition does not retry or close the action. No
+migration was needed. Tests, type checks, lint, browser QA and provider calls were not run at the
+operator's instruction.
+
+## Inventory Agent — direct purchase movement reviews (2026-11-14)
+
+The Inventory Agent can now optionally review canonical direct-purchase stock movements, in
+addition to received purchase orders. The review is owner-opt-in, read-only, checks the actual
+movement belongs to the business and still has purchase kind, and uses an idempotent event key.
+The queue is keyed from the movement's persisted business ID so branch-scoped purchases are
+reviewed in the correct business. No migration was needed. Tests, type checks, lint and browser QA
+were not run at the user's instruction.
+
+## Commerce Agent — completed production reviews (2026-11-14)
+
+Completed production work orders, including releases from quality hold, can now opt in to an
+idempotent, read-only Commerce Agent review. Queueing occurs after the canonical work-order
+transaction commits, and the worker confirms the business is active, Commerce remains enabled, and
+the same work-order version is still completed before starting the run. No migration was needed.
+Tests, type checks, lint and browser QA were not run at the user's instruction.
+
+## Customer Agent — privacy-minimized return context and approval reviews (2026-11-14)
+
+The selected-customer read-only tool set now includes canonical return status/date history, with
+refund amounts, payment details, line items, free-text reasons and personal contact values withheld.
+It requires Orders to be enabled and checks the authenticated selected-customer context. Separately,
+approved returns can opt in to one idempotent Customer review; the worker verifies the active
+business, customer module selection, exact approved Return version and non-erased customer before
+starting. No migration was needed. Tests, type checks, lint and browser QA were not run at the user's
+instruction.
+
+## Customer Agent — recheck source modules used by tool results (2026-11-14)
+
+Read-only Customer Agent tools can now return the source modules that actually contributed data to
+that result. The shared tool gateway validates those module keys and checks selection immediately
+after the handler returns. The selected-customer question flow carries the same source set through
+the check before final AI generation, after the provider response and in the transaction that saves
+the answer. This covers optional Orders, Profit, Bookings, Unified Inbox, Credit and Reviews data
+without blocking a partial answer when a source was already disabled and therefore returned no data.
+If an owner disables a source while a tool or answer is in flight, the answer is refused instead of
+being returned or persisted with stale source data. No migration was needed. Tests, type checks,
+lint, browser QA and provider calls were not run at the user's instruction.
+
+## Customer Agent — opt-in review after order cancellation (2026-11-14)
+
+Cancelling a customer-linked order can now queue a read-only Customer review when the owner enables
+the new AI Settings policy. The versioned event contains the tenant, stable event/correlation IDs,
+source module, order ID and saved update timestamp;
+the worker and canonical review service recheck the active business, Customer and Orders module
+selection, current cancelled status/version and non-erased customer before starting. The saved run
+contains contact-presence and CRM consent flags only, not contact values, order amounts or the
+cancellation reason. It creates a human-review recommendation and never contacts the customer. The
+queue is best-effort so a review-queue outage cannot undo an order cancellation. No migration was
+needed. Tests, type checks, lint, browser QA and provider calls were not run at the user's
+instruction.

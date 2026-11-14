@@ -1,0 +1,28 @@
+CREATE TABLE `seo_outcome_snapshots` (
+  `id` VARCHAR(191) NOT NULL,
+  `business_id` VARCHAR(191) NOT NULL,
+  `action_type` VARCHAR(32) NOT NULL,
+  `action_id` VARCHAR(191) NOT NULL,
+  `action_label` VARCHAR(300) NOT NULL,
+  `keyword` VARCHAR(191) NULL,
+  `target_url` VARCHAR(2048) NULL,
+  `applied_at` DATETIME(3) NOT NULL,
+  `baseline_rank` INTEGER NULL,
+  `baseline_captured_at` DATETIME(3) NULL,
+  `measured_rank` INTEGER NULL,
+  `measured_at` DATETIME(3) NOT NULL,
+  `rank_change` INTEGER NULL,
+  `outcome_state` VARCHAR(40) NOT NULL,
+  `rank_source` VARCHAR(80) NOT NULL,
+  `crawl_verified_at` DATETIME(3) NULL,
+  `caveat` TEXT NOT NULL,
+  `observation_key` CHAR(64) NOT NULL,
+  `created_by_user_id` VARCHAR(191) NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE INDEX `seo_outcome_snapshots_business_observation_uq` (`business_id`, `observation_key`),
+  INDEX `seo_outcome_snapshots_business_action_measured_idx` (`business_id`, `action_type`, `action_id`, `measured_at`),
+  INDEX `seo_outcome_snapshots_business_created_idx` (`business_id`, `created_at`),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `seo_outcome_snapshots_business_fk`
+    FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

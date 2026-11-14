@@ -6,6 +6,7 @@ import { AppException } from '../common/filters/app.exception';
 import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
 import { createSpecialistAgentAction } from '../common/agents/specialist-agent-action.util';
 import { SpecialistAgentActionsService } from './specialist-agent-actions.service';
+import { SpecialistAgentActionExpiryService } from './specialist-agent-action-expiry.service';
 
 jest.setTimeout(30_000);
 
@@ -73,6 +74,7 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
       customerSegments as never,
       customerActions as never,
       new SpecialistAgentPolicyService(prisma, cls as unknown as ClsService),
+      new SpecialistAgentActionExpiryService(prisma),
     );
     businessId = (
       await prisma.business.create({
@@ -1174,5 +1176,111 @@ describe('SpecialistAgentActionsService (MySQL)', () => {
       response: { code: 'SPECIALIST_ACTION_VERSION_CONFLICT' },
     });
     expect(procurement.cancelApprovedRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves stale executing actions to review without claiming success or retrying', async () => {
+    const now = new Date();
+    const stale = await createAction({
+      businessId,
+      agentKey: 'inventory_intelligence',
+      actionType: 'inventory_reorder_request',
+      state: 'executing',
+      createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+    });
+    const recent = await createAction({
+      businessId,
+      agentKey: 'inventory_intelligence',
+      actionType: 'inventory_reorder_request',
+      state: 'executing',
+      createdAt: now,
+    });
+    await prisma.specialistAgentAction.update({
+      where: { id: stale.id },
+      data: { updatedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+    });
+
+    const expiry = new SpecialistAgentActionExpiryService(prisma);
+    const moved = await expiry.reconcileStaleBusinessExecutions(
+      businessId,
+      60,
+      now,
+    );
+
+    expect(moved).toBe(1);
+    await expect(
+      prisma.specialistAgentAction.findUniqueOrThrow({
+        where: { id: stale.id },
+        select: { state: true, errorMessage: true },
+      }),
+    ).resolves.toMatchObject({
+      state: 'needs_review',
+      errorMessage: expect.stringContaining('outcome is unknown'),
+    });
+    await expect(
+      prisma.specialistAgentAction.findUniqueOrThrow({
+        where: { id: recent.id },
+        select: { state: true },
+      }),
+    ).resolves.toMatchObject({ state: 'executing' });
+    expect(
+      await prisma.specialistAgentActionEvent.findFirst({
+        where: { businessId, actionId: stale.id },
+        orderBy: { sequence: 'desc' },
+        select: { eventType: true, fromState: true, toState: true },
+      }),
+    ).toMatchObject({
+      eventType: 'execution_outcome_unknown',
+      fromState: 'executing',
+      toState: 'needs_review',
+    });
+    expect(
+      await prisma.auditLog.findFirst({
+        where: {
+          businessId,
+          action: 'specialist_agent.action.execution_outcome_unknown',
+          entityId: stale.id,
+        },
+        select: { after: true },
+      }),
+    ).toMatchObject({
+      after: {
+        state: 'needs_review',
+        reasonCode: 'stale_execution_outcome_unknown',
+      },
+    });
+
+    await expect(
+      service.resolveUnknownOutcome(businessId, 'owner-id', stale.id, {
+        reason: 'Checked the canonical Procurement request and recorded its state.',
+      }),
+    ).resolves.toMatchObject({ id: stale.id, state: 'closed' });
+    expect(
+      await prisma.specialistAgentActionEvent.findFirst({
+        where: {
+          businessId,
+          actionId: stale.id,
+          eventType: 'execution_outcome_reconciled_closed',
+        },
+        select: { reason: true },
+      }),
+    ).toMatchObject({
+      reason: 'Checked the canonical Procurement request and recorded its state.',
+    });
+    expect(
+      await prisma.auditLog.findFirst({
+        where: {
+          businessId,
+          action: 'specialist_agent.action.execution_outcome_reconciled',
+          entityId: stale.id,
+        },
+        select: { after: true },
+      }),
+    ).toMatchObject({
+      after: {
+        state: 'closed',
+        outcome: 'unknown_closed_by_owner',
+        providerConfirmed: false,
+      },
+    });
   });
 });

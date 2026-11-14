@@ -304,6 +304,7 @@ describe('SettingsHubService', () => {
     });
     expect(findRow(currentRows, 'specialist-agent-commerce-read-tools-per-run')).toMatchObject({ value: '3 read-tool calls / run', editable: true });
     expect(findRow(currentRows, 'specialist-agent-actions-per-run')).toMatchObject({ value: '10 actions / run', editable: true });
+    expect(findRow(currentRows, 'specialist-agent-action-stale-execution')).toMatchObject({ value: '60 minutes', editable: true });
     expect(findRow(currentRows, 'specialist-queued-run-warning-age')).toMatchObject({ value: 'No warning', editable: true });
     expect(findRow(currentRows, 'specialist-agent-output-tokens-per-request')).toMatchObject({ value: '1024 output tokens / request', editable: true });
     expect(findRow(currentRows, 'specialist-agent-input-bytes-per-request')).toMatchObject({ value: '1,048,576 bytes / request', editable: true });

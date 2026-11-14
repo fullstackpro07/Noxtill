@@ -52,30 +52,28 @@ export interface CustomerAgentSnapshot {
     routedCounts: { public: number; private: number };
     source: string;
     note: string;
+  } | null;
+  customerFeedbackState?: "available" | "module_disabled";
+  customerJourneyContext?: {
+    state: "available" | "partial" | "not_available_for_selected_branch";
+    windowDays: number;
+    from: string;
+    observedAt: string;
+    appointmentStatusCounts: Record<string, number> | null;
+    upcomingConfirmedAppointmentCount: number | null;
+    supportTicketStatusCounts: Record<string, number> | null;
+    openSupportTicketCount: number | null;
+    messageStatusByChannel: Array<{
+      channel: string;
+      status: string;
+      count: number;
+    }> | null;
+    moduleSources: {
+      bookings: "included" | "disabled";
+      unifiedInbox: "included" | "disabled";
+    };
+    note: string;
   };
-  customerJourneyContext?:
-    | {
-        state: "available";
-        windowDays: number;
-        from: string;
-        observedAt: string;
-        appointmentStatusCounts: Record<string, number>;
-        upcomingConfirmedAppointmentCount: number;
-        supportTicketStatusCounts: Record<string, number>;
-        openSupportTicketCount: number;
-        note: string;
-      }
-    | {
-        state: "not_available_for_selected_branch";
-        windowDays: number;
-        from: string;
-        observedAt: string;
-        appointmentStatusCounts: null;
-        upcomingConfirmedAppointmentCount: null;
-        supportTicketStatusCounts: null;
-        openSupportTicketCount: null;
-        note: string;
-      };
   followUpOutcomes?:
     | {
         state: "available";
@@ -109,6 +107,10 @@ export interface CustomerAgentSnapshot {
       }
     | {
         state: "not_available_for_selected_branch";
+        note: string;
+      }
+    | {
+        state: "module_disabled";
         note: string;
       };
   proposedSegment?: {
@@ -175,7 +177,7 @@ export interface CustomerAgentRun {
   output: {
     summary?: string;
     answer?: string | null;
-    answerStatus?: "ready" | "unavailable";
+    answerStatus?: "ready" | "unavailable" | "erased";
     message?: string | null;
     tools?: Array<{
       tool: string;
@@ -227,8 +229,14 @@ export function runCustomerAgent(): Promise<CustomerAgentRun> {
   );
 }
 
-export function askCustomerAgent(question: string): Promise<CustomerAgentRun> {
-  const body = { question: question.trim() };
+export function askCustomerAgent(
+  question: string,
+  customerId?: string,
+): Promise<CustomerAgentRun> {
+  const body = {
+    question: question.trim(),
+    ...(customerId ? { customerId } : {}),
+  };
   return postSpecialistAgentRun("customer", body, (idempotencyKey) =>
     apiFetch<CustomerAgentRun>("/analytics/customers/agent-questions", {
       method: "POST",
@@ -331,6 +339,14 @@ export interface CustomerProfileIntelligence {
     state: string;
     recordedLifetimeSpend: number | null;
     currency: string | null;
+  };
+  credit: {
+    state: string;
+    balance: number | null;
+    currency: string | null;
+    entryCount: number | null;
+    lastEntryAt: string | null;
+    definition: string;
   };
   marketing: {
     state: string;

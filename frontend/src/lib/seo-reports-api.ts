@@ -35,6 +35,102 @@ export interface SeoReport {
     baselineTo: string;
   };
   metrics: ReportMetric[];
+  contentRankOutcomes: {
+    briefId: string;
+    topic: string;
+    keyword: string | null;
+    publishedUrl: string | null;
+    publishedAt: string | null;
+    liveConfirmedAt: string | null;
+    baselineRank: number | null;
+    measuredRank: number | null;
+    measuredAt: string | null;
+    rankChange: number | null;
+    state:
+      | "keyword_not_linked"
+      | "baseline_not_available"
+      | "awaiting_post_publish_check"
+      | "not_in_results"
+      | "observed";
+    source: string;
+    caveat: string;
+  }[];
+  actionRankOutcomes: {
+    actionId: string;
+    kind: "on_page" | "technical";
+    label: string;
+    targetUrl: string;
+    appliedAt: string;
+    verifiedAt: string | null;
+    keyword: string | null;
+    baselineRank: number | null;
+    baselineCheckedAt: string | null;
+    measuredRank: number | null;
+    measuredAt: string | null;
+    rankChange: number | null;
+    state:
+      | "keyword_not_linked"
+      | "baseline_not_available"
+      | "awaiting_post_action_check"
+      | "not_in_results"
+      | "observed";
+    source: string;
+    caveat: string;
+  }[];
+  actionLandingPageOutcomes: {
+    actionId: string;
+    kind: "on_page" | "technical";
+    label: string;
+    targetUrl: string;
+    targetPath: string | null;
+    appliedAt: string;
+    property: string | null;
+    propertyName: string | null;
+    currencyCode: string | null;
+    comparisonPeriod: { startDate: string; endDate: string } | null;
+    currentPeriod: { startDate: string; endDate: string } | null;
+    comparison: {
+      dataState: "not_available" | "path_not_matchable" | "no_exact_path" | "matched";
+      rows: {
+        landingPage: string;
+        sessions: string | null;
+        keyEvents: string | null;
+        totalRevenue: string | null;
+      }[];
+      reason: string | null;
+    };
+    current: {
+      dataState: "not_available" | "path_not_matchable" | "no_exact_path" | "matched";
+      rows: {
+        landingPage: string;
+        sessions: string | null;
+        keyEvents: string | null;
+        totalRevenue: string | null;
+      }[];
+      reason: string | null;
+    };
+    fetchedAt: string | null;
+    disclosure: string;
+  }[];
+  savedOutcomeSnapshots: {
+    id: string;
+    actionType: string;
+    actionId: string;
+    actionLabel: string;
+    keyword: string | null;
+    targetUrl: string | null;
+    appliedAt: string;
+    baselineRank: number | null;
+    baselineCapturedAt: string | null;
+    measuredRank: number | null;
+    measuredAt: string;
+    rankChange: number | null;
+    outcomeState: string;
+    rankSource: string;
+    crawlVerifiedAt: string | null;
+    caveat: string;
+    createdAt: string;
+  }[];
   searchConsole: {
     status: "not_connected" | "connected" | "needs_attention";
     selectedProperty: string | null;
@@ -73,3 +169,14 @@ export interface SeoReport {
 
 export const fetchSeoReport = (days: number) =>
   apiFetch<SeoReport>(`/seo-autopilot/reports?days=${days}`);
+
+export const saveSeoOutcomeSnapshots = (days: number) =>
+  apiFetch<{
+    observedCandidates: number;
+    createdCount: number;
+    duplicateCount: number;
+    capturedAt: string;
+    disclosure: string;
+  }>(`/seo-autopilot/reports/outcome-snapshots?days=${days}`, {
+    method: "POST",
+  });

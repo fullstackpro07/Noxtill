@@ -11,8 +11,9 @@ export type SpecialistAgentEventAttempt = {
 /**
  * Selects a stable, bounded idempotency key for a BullMQ specialist-event attempt.
  * Failed earlier attempts do not block a retry; completed or running attempts still
- * prevent duplicate work. Raw keys are only passed to the normal run service, which
- * persists their hashes rather than the keys themselves.
+ * prevent duplicate work. Inactive or deleted businesses are never scheduled from a
+ * stale queued event. Raw keys are only passed to the normal run service, which persists
+ * their hashes rather than the keys themselves.
  */
 export async function resolveSpecialistAgentEventAttempt(
   prisma: PrismaService,
@@ -35,6 +36,12 @@ export async function resolveSpecialistAgentEventAttempt(
         : `${input.baseIdempotencyKey}:retry:${index}`,
   );
   const idempotencyKey = attemptKeys[attemptsMade] ?? input.baseIdempotencyKey;
+  const business = await prisma.business.findFirst({
+    where: { id: input.businessId, active: true },
+    select: { id: true },
+  });
+  if (!business) return { shouldRun: false, idempotencyKey };
+
   const currentAttemptHash = specialistAgentIdempotencyHash(idempotencyKey);
   const existingRuns = await prisma.specialistAgentRun.findMany({
     where: {

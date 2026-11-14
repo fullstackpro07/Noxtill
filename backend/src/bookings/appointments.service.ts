@@ -29,7 +29,9 @@ import { resolvePolicies } from '../common/policies/policies.service';
 import { assertBookingWindow, assertDayNotFull } from './booking-policy.util';
 import { assertPhoneBookingSlot } from './phone-booking-policy.util';
 import {
+  CUSTOMER_APPOINTMENT_COMPLETED_EVENT_JOB,
   CUSTOMER_APPOINTMENT_CANCELLED_EVENT_JOB,
+  CUSTOMER_APPOINTMENT_RESCHEDULED_EVENT_JOB,
   CUSTOMER_NO_SHOW_EVENT_JOB,
   SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
 } from '../common/agents/specialist-agent-events.constants';
@@ -156,6 +158,11 @@ export class AppointmentsService {
         entityType: 'Appointment',
         entityId: updated.id,
       });
+      await this.queueCustomerAppointmentCompletedReview(
+        businessId,
+        updated.id,
+        updated.updatedAt,
+      );
       await this.reviewRequests.scheduleSend(
         businessId,
         updated.customerId,
@@ -241,6 +248,44 @@ export class AppointmentsService {
     }
   }
 
+  private async queueCustomerAppointmentCompletedReview(
+    businessId: string,
+    appointmentId: string,
+    completedAt: Date,
+  ): Promise<void> {
+    if (!this.customerAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, policies: true },
+      });
+      if (!business) return;
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.customerEnabled') ||
+        !policies.bool('agents.customerAppointmentCompletedEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      await this.customerAgentEvents.add(
+        CUSTOMER_APPOINTMENT_COMPLETED_EVENT_JOB,
+        { businessId, appointmentId, completedAt: completedAt.toISOString() },
+        {
+          jobId: `customer-appointment-completed-${businessId}-${appointmentId}-${completedAt.getTime()}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: false,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Customer review for completed appointment ${appointmentId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
   private async queueCustomerAppointmentCancelledReview(
     businessId: string,
     appointmentId: string,
@@ -279,6 +324,46 @@ export class AppointmentsService {
     }
   }
 
+  private async queueCustomerAppointmentRescheduledReview(
+    businessId: string,
+    appointmentId: string,
+    rescheduledAt: Date,
+  ): Promise<void> {
+    if (!this.customerAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { id: true, policies: true },
+      });
+      if (!business) return;
+      const policies = resolvePolicies(business);
+      if (
+        !policies.bool('agents.customerEnabled') ||
+        !policies.bool(
+          'agents.customerAppointmentRescheduledEventReviewEnabled',
+        )
+      ) {
+        return;
+      }
+
+      await this.customerAgentEvents.add(
+        CUSTOMER_APPOINTMENT_RESCHEDULED_EVENT_JOB,
+        { businessId, appointmentId, rescheduledAt: rescheduledAt.toISOString() },
+        {
+          jobId: `customer-appointment-rescheduled-${businessId}-${appointmentId}-${rescheduledAt.getTime()}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 1_000,
+          removeOnFail: false,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Customer review for rescheduled appointment ${appointmentId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
   /** Internal, staff-initiated reschedule (e.g. drag-and-drop on the calendar) — distinct from the
    * public, token-based customer self-service reschedule, which only ever moves time, not staff. */
   async reschedule(
@@ -304,7 +389,7 @@ export class AppointmentsService {
       dto.staffUserId !== undefined ? dto.staffUserId : appointment.staffUserId;
     if (service) assertEligibleStaff(service, staffId);
 
-    return this.tenantPrisma.client.$transaction(async (tx) => {
+    const updated = await this.tenantPrisma.client.$transaction(async (tx) => {
       await assertSlotAvailable(tx, {
         businessId,
         staffId,
@@ -333,6 +418,18 @@ export class AppointmentsService {
         },
       });
     });
+
+    const appointmentWasRescheduled =
+      appointment.startsAt.getTime() !== updated.startsAt.getTime() ||
+      appointment.staffUserId !== updated.staffUserId;
+    if (appointmentWasRescheduled && updated.customerId) {
+      await this.queueCustomerAppointmentRescheduledReview(
+        businessId,
+        updated.id,
+        updated.updatedAt,
+      );
+    }
+    return updated;
   }
 
   /** Walk-in booking (internal only — no public counterpart) — customer is already present, so it

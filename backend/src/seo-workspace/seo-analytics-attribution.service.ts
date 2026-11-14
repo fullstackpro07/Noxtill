@@ -506,7 +506,24 @@ export class SeoAnalyticsAttributionService {
     return this.summary(businessId);
   }
 
-  async agentEvidence(businessId: string) {
+  async agentEvidence(businessId: string, includeIntegrationData = true) {
+    if (!includeIntegrationData) {
+      return {
+        status: 'not_evaluated' as const,
+        property: null,
+        propertyName: null,
+        currencyCode: null,
+        windowDays: WINDOW_DAYS,
+        current: null,
+        comparison: null,
+        landingPages: null,
+        fetchedAt: null,
+        disclosure:
+          'Google Analytics evidence was not read because Integrations is disabled for this business.',
+        unavailableReason:
+          'Not evaluated because the Integrations module is disabled.',
+      };
+    }
     const current = await this.summary(businessId);
     const connected = current.status === IntegrationStatus.connected;
     const snapshot = connected ? current.snapshot : null;

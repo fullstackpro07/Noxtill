@@ -297,6 +297,7 @@ export type CommerceAgentSpecialistRun = {
   finishedAt: string | null;
   output: {
     summary?: string;
+    message?: string;
     snapshot?: CommerceAgentStatusSnapshot;
     sourcingReview?: CommerceSourcingComparisonReview;
     validationScorecards?: CommerceValidationScorecardReview;
@@ -310,9 +311,10 @@ export type CommerceAgentSpecialistRun = {
     reviewSteps?: {
       key: string;
       label: string;
-      status: 'completed' | 'failed';
+      status: 'completed' | 'failed' | 'skipped';
       durationMs: number;
       errorCode: string | null;
+      unavailableReason: string | null;
     }[];
     orderFulfillmentOrchestration?: CommerceOrderFulfillmentOrchestration;
     productSourcingOrchestration?: CommerceProductSourcingOrchestration;

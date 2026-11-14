@@ -1,8 +1,13 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import type { Prisma, Role } from '@prisma/client';
 import { AppException } from '../filters/app.exception';
 import { TenantPrismaService } from '../tenancy/tenant-prisma.service';
 import { resolvePolicies } from '../policies/policies.service';
 import type { PolicyKey } from '../policies/policies.constants';
+import { BusinessModulesService } from '../../business-modules/business-modules.service';
+import { BUSINESS_MODULE_KEYS } from '../../business-modules/business-modules.constants';
+import { CAPABILITIES, type Capability } from '../capabilities/capabilities.constants';
+import { CapabilitiesService } from '../capabilities/capabilities.service';
 import {
   SPECIALIST_AGENT_REGISTRY,
   type SpecialistAgentPersistedKey,
@@ -24,6 +29,8 @@ import { recordSpecialistAgentToolEvent } from './specialist-agent-run-events.ut
 export interface RegisteredSpecialistAgentTool extends SpecialistAgentToolContract {
   riskClass: string;
   executable: boolean;
+  /** Additional selectable modules whose data this tool requires in full. */
+  requiredModules?: readonly string[];
   exposedToReadOnlyAssistant?: boolean;
   approvalSupported?: boolean;
   approvalActionType?: string;
@@ -45,6 +52,8 @@ export interface SpecialistAgentToolExecutionContext {
 export interface SpecialistAgentToolHandlerResult {
   output: unknown;
   status: CompletedSpecialistAgentToolCallStatus;
+  /** Optional modules whose live records contributed to this particular result. */
+  sourceModules?: readonly string[];
   summary?: string | null;
   outputResourceType?: string | null;
   outputResourceId?: string | null;
@@ -55,6 +64,7 @@ export interface SpecialistAgentToolGatewayResult {
   tool: RegisteredSpecialistAgentTool;
   output: unknown;
   status: CompletedSpecialistAgentToolCallStatus;
+  sourceModules: readonly string[];
   summary: string | null;
   outputResourceType: string | null;
   outputResourceId: string | null;
@@ -67,6 +77,14 @@ const AGENT_TOOL_BUDGET_POLICY = {
   seo_autopilot: 'agents.seoMaxToolCallsPerRun',
   autonomous_commerce: 'agents.commerceMaxToolCallsPerRun',
 } as const satisfies Record<SpecialistAgentPersistedKey, PolicyKey>;
+
+const AGENT_RUN_CAPABILITY = {
+  inventory_intelligence: CAPABILITIES.INVENTORY_AGENT_RUN,
+  financial_intelligence: CAPABILITIES.FINANCE_AGENT_RUN,
+  customer_intelligence: CAPABILITIES.CUSTOMER_AGENT_RUN,
+  seo_autopilot: CAPABILITIES.SEO_AGENT_RUN,
+  autonomous_commerce: CAPABILITIES.COMMERCE_AGENT_RUN,
+} as const satisfies Record<SpecialistAgentPersistedKey, Capability>;
 
 export type SpecialistAgentToolHandler = (
   context: SpecialistAgentToolExecutionContext,
@@ -94,8 +112,22 @@ export class SpecialistAgentToolGatewayService {
     SpecialistAgentPersistedKey,
     RegisteredAgent
   >();
+  private readonly businessModules: BusinessModulesService;
+  private readonly capabilities: CapabilitiesService | null;
 
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    @Optional() businessModules?: BusinessModulesService,
+  ) {
+    // Standalone service specs may instantiate the gateway directly. Keep the
+    // same module-selection rules there while production uses the shared DI
+    // instance from BusinessModulesModule.
+    this.businessModules =
+      businessModules ?? new BusinessModulesService(tenantPrisma.unscoped);
+    this.capabilities = tenantPrisma.unscoped
+      ? new CapabilitiesService(tenantPrisma.unscoped)
+      : null;
+  }
 
   registerAgentTools(
     agentKey: SpecialistAgentPersistedKey,
@@ -170,6 +202,22 @@ export class SpecialistAgentToolGatewayService {
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
+      const requiredModules = tool.requiredModules ?? [];
+      if (
+        !Array.isArray(requiredModules) ||
+        new Set(requiredModules).size !== requiredModules.length ||
+        requiredModules.some(
+          (moduleKey) =>
+            typeof moduleKey !== 'string' ||
+            !BUSINESS_MODULE_KEYS.has(moduleKey),
+        )
+      ) {
+        throw new AppException(
+          'SPECIALIST_AGENT_TOOL_REGISTRATION_INVALID',
+          `The required source modules for ${tool.key} are invalid or duplicated.`,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
       registered.set(tool.key, tool);
     }
 
@@ -196,6 +244,158 @@ export class SpecialistAgentToolGatewayService {
   ): RegisteredSpecialistAgentTool[] {
     return [...(this.agents.get(agentKey)?.tools.values() ?? [])].filter(
       filter,
+    );
+  }
+
+  /**
+   * Revalidate the declared and result-specific source modules before tool
+   * results are sent to another AI request or returned as an answer. A module
+   * can be disabled after a handler returns, so the execution-time check alone
+   * is not enough for multi-round question flows.
+   */
+  async assertToolSourcesEnabled(
+    businessId: string,
+    agentKey: SpecialistAgentPersistedKey,
+    toolKeys: readonly string[],
+    authorization?: {
+      actorUserId: string | null;
+      runId: string;
+      sourceModuleKeys?: readonly string[];
+    },
+  ): Promise<void> {
+    await this.assertBusinessActive(businessId);
+    if (authorization) {
+      await this.assertInitiatingActorCanRun({
+        businessId,
+        agentKey,
+        actorUserId: authorization.actorUserId,
+        runId: authorization.runId,
+      });
+    }
+    const registeredAgent = this.agents.get(agentKey);
+    const definition = SPECIALIST_AGENT_REGISTRY.find(
+      (agent) => agent.agentKey === agentKey,
+    );
+    if (
+      !registeredAgent ||
+      !definition ||
+      definition.moduleId !== registeredAgent.moduleId
+    ) {
+      throw new AppException(
+        'SPECIALIST_AGENT_TOOL_NOT_ALLOWED',
+        'The registered agent source policy is unavailable for this answer.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const requiredModules = new Set<string>([definition.moduleKey]);
+    for (const toolKey of new Set(toolKeys)) {
+      const tool = registeredAgent.tools.get(toolKey);
+      if (!tool || !tool.executable || tool.riskClass !== 'READ_ONLY') {
+        throw new AppException(
+          'SPECIALIST_AGENT_TOOL_NOT_ALLOWED',
+          'A source tool used for this answer is no longer registered as read-only.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      for (const moduleKey of tool.requiredModules ?? []) {
+        requiredModules.add(moduleKey);
+      }
+    }
+    for (const moduleKey of this.normalizeSourceModules(
+      authorization?.sourceModuleKeys,
+    )) {
+      requiredModules.add(moduleKey);
+    }
+
+    await this.assertToolModulesEnabled(
+      businessId,
+      definition.moduleKey,
+      [...requiredModules].filter(
+        (moduleKey) => moduleKey !== definition.moduleKey,
+      ),
+    );
+  }
+
+  async assertToolSourcesEnabledInTransaction(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    agentKey: SpecialistAgentPersistedKey,
+    toolKeys: readonly string[],
+    authorization?: {
+      actorUserId: string | null;
+      runId: string;
+      sourceModuleKeys?: readonly string[];
+    },
+  ): Promise<void> {
+    const businessRows = await tx.$queryRaw<Array<{ active: number }>>`
+      SELECT active
+      FROM businesses
+      WHERE id = ${businessId}
+      FOR UPDATE
+    `;
+    if (!businessRows[0]) {
+      throw new AppException(
+        'SPECIALIST_AGENT_BUSINESS_NOT_FOUND',
+        'The business for this specialist answer could not be found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (Number(businessRows[0].active) !== 1) {
+      throw new AppException(
+        'SPECIALIST_AGENT_BUSINESS_INACTIVE',
+        'Specialist answers cannot be saved while this business is inactive.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    if (authorization) {
+      await this.assertInitiatingActorCanRun({
+        businessId,
+        agentKey,
+        actorUserId: authorization.actorUserId,
+        runId: authorization.runId,
+      });
+    }
+    const registeredAgent = this.agents.get(agentKey);
+    const definition = SPECIALIST_AGENT_REGISTRY.find(
+      (agent) => agent.agentKey === agentKey,
+    );
+    if (
+      !registeredAgent ||
+      !definition ||
+      definition.moduleId !== registeredAgent.moduleId
+    ) {
+      throw new AppException(
+        'SPECIALIST_AGENT_TOOL_NOT_ALLOWED',
+        'The registered agent source policy is unavailable for this answer.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const requiredModules = new Set<string>([definition.moduleKey]);
+    for (const toolKey of new Set(toolKeys)) {
+      const tool = registeredAgent.tools.get(toolKey);
+      if (!tool || !tool.executable || tool.riskClass !== 'READ_ONLY') {
+        throw new AppException(
+          'SPECIALIST_AGENT_TOOL_NOT_ALLOWED',
+          'A source tool used for this answer is no longer registered as read-only.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      for (const moduleKey of tool.requiredModules ?? []) {
+        requiredModules.add(moduleKey);
+      }
+    }
+    for (const moduleKey of this.normalizeSourceModules(
+      authorization?.sourceModuleKeys,
+    )) {
+      requiredModules.add(moduleKey);
+    }
+
+    await this.businessModules.assertEnabledInTransaction(
+      tx,
+      businessId,
+      [...requiredModules],
     );
   }
 
@@ -251,8 +451,29 @@ export class SpecialistAgentToolGatewayService {
       );
     }
 
+    try {
+      await this.assertBusinessActive(input.businessId);
+      await this.assertToolModulesEnabled(
+        input.businessId,
+        definition.moduleKey,
+        tool.requiredModules ?? [],
+      );
+    } catch (error) {
+      await this.record({
+        ...this.recordContext(input),
+        toolKey: tool.key,
+        toolVersion: specialistAgentToolVersion(tool),
+        status: error instanceof AppException ? 'refused' : 'failed',
+        input: { authorization: 'module_selection' },
+        durationMs: 0,
+        errorCode: this.safeErrorCode(error),
+      });
+      throw error;
+    }
+
     const startedAt = Date.now();
     let normalizedInput: Record<string, string>;
+    let sourceModules: string[] = [];
     try {
       normalizedInput = normalizeSpecialistAgentToolInput(tool, input.input, {
         errorCode: 'SPECIALIST_AGENT_TOOL_INPUT_INVALID',
@@ -289,11 +510,27 @@ export class SpecialistAgentToolGatewayService {
         await this.assertApprovedAction(input, tool);
       }
       await input.authorize();
+      // Re-read selection after the durable tool-call reservation and immediately before
+      // invoking the domain handler. A settings change during reservation must fail closed.
+      await this.assertToolModulesEnabled(
+        input.businessId,
+        definition.moduleKey,
+        tool.requiredModules ?? [],
+      );
+      await this.assertInitiatingActorCanRun(input);
+      await this.assertBusinessActive(input.businessId);
       handlerResult = await registeredAgent.handler(
         input,
         tool,
         normalizedInput,
       );
+      sourceModules = this.normalizeSourceModules(handlerResult.sourceModules);
+      await this.assertToolModulesEnabled(
+        input.businessId,
+        definition.moduleKey,
+        [...(tool.requiredModules ?? []), ...sourceModules],
+      );
+      await this.assertBusinessActive(input.businessId);
     } catch (error) {
       await this.record({
         ...this.recordContext(input),
@@ -343,6 +580,7 @@ export class SpecialistAgentToolGatewayService {
       tool,
       output,
       status: handlerResult.status,
+      sourceModules,
       summary:
         typeof handlerResult.summary === 'string'
           ? handlerResult.summary.slice(0, 2_000)
@@ -359,6 +597,139 @@ export class SpecialistAgentToolGatewayService {
       );
       await recordSpecialistAgentToolEvent(tx, input);
     });
+  }
+
+  private async assertToolModulesEnabled(
+    businessId: string,
+    agentModuleKey: string,
+    requiredModules: readonly string[],
+  ): Promise<void> {
+    for (const moduleKey of new Set([agentModuleKey, ...requiredModules])) {
+      await this.businessModules.assertEnabled(businessId, moduleKey);
+    }
+  }
+
+  private normalizeSourceModules(
+    sourceModules: readonly string[] | undefined,
+  ): string[] {
+    if (sourceModules === undefined) return [];
+    if (
+      !Array.isArray(sourceModules) ||
+      sourceModules.some(
+        (moduleKey) =>
+          typeof moduleKey !== 'string' ||
+          !BUSINESS_MODULE_KEYS.has(moduleKey),
+      )
+    ) {
+      throw new AppException(
+        'SPECIALIST_AGENT_SOURCE_MODULE_INVALID',
+        'A specialist tool returned an invalid source-module declaration.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    return [...new Set(sourceModules)];
+  }
+
+  private async assertBusinessActive(businessId: string): Promise<void> {
+    const business = await this.tenantPrisma.unscoped.business.findUnique({
+      where: { id: businessId },
+      select: { active: true },
+    });
+    if (!business) {
+      throw new AppException(
+        'SPECIALIST_AGENT_BUSINESS_NOT_FOUND',
+        'The business for this specialist run could not be found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (!business.active) {
+      throw new AppException(
+        'SPECIALIST_AGENT_BUSINESS_INACTIVE',
+        'Specialist tools cannot run while this business is inactive.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  /**
+   * API authorization is checked when a run is created, but a durable run can
+   * wait while team permissions change. Re-resolve the original actor's active
+   * membership and live capability immediately before calling a domain tool.
+   * Triggered/scheduled system runs have no initiating actor and continue to use
+   * their explicit agent and module policies.
+   */
+  async assertInitiatingActorCanRun(
+    input: Pick<
+      SpecialistAgentToolExecutionContext,
+      'businessId' | 'actorUserId' | 'agentKey' | 'runId'
+    >,
+  ): Promise<void> {
+    if (!input.actorUserId) return;
+    if (!this.capabilities) {
+      throw new AppException(
+        'SPECIALIST_AGENT_ACTOR_AUTHORIZATION_UNAVAILABLE',
+        'The initiating user permission could not be revalidated, so the specialist tool was not run.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    const database = this.tenantPrisma.unscoped;
+    const business = await database.business.findUnique({
+      where: { id: input.businessId },
+      select: { parentId: true },
+    });
+    const candidateBusinessIds = [
+      input.businessId,
+      ...(business?.parentId ? [business.parentId] : []),
+    ];
+    let membership: {
+      businessId: string;
+      role: Role;
+      customRoleId: string | null;
+    } | null = null;
+    for (const businessId of candidateBusinessIds) {
+      membership = await database.businessUser.findFirst({
+        where: {
+          userId: input.actorUserId,
+          businessId,
+          active: true,
+        },
+        select: { businessId: true, role: true, customRoleId: true },
+      });
+      if (membership) break;
+    }
+
+    const capability = AGENT_RUN_CAPABILITY[input.agentKey];
+    const allowed = membership
+      ? (
+          await this.capabilities.resolve({
+            businessId: membership.businessId,
+            role: membership.role,
+            customRoleId: membership.customRoleId,
+          })
+        ).includes(capability)
+      : false;
+    if (!allowed) {
+      await this.tenantPrisma.client.auditLog.create({
+        data: {
+          businessId: input.businessId,
+          actorUserId: input.actorUserId,
+          action: 'specialist_agent.tool.actor_authorization_denied',
+          entity: 'SpecialistAgentRun',
+          entityId: input.runId,
+          after: {
+            agentKey: input.agentKey,
+            denied: true,
+            reasonCode: 'SPECIALIST_AGENT_ACTOR_PERMISSION_REVOKED',
+          },
+        },
+      });
+      throw new AppException(
+        'SPECIALIST_AGENT_ACTOR_PERMISSION_REVOKED',
+        'The user who started this specialist run no longer has permission to use this agent. The tool call was stopped.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
   }
 
   private async reserveToolCallSlot(

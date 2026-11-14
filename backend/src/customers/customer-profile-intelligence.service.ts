@@ -95,6 +95,7 @@ export class CustomerProfileIntelligenceService {
         'agents.customerRetentionMinimumOrderDecline',
       ) ?? 1;
     const canSeeSpend =
+      !disabled.includes('profit') &&
       role !== Role.staff &&
       (await this.policies.actorCan(CAPABILITIES.PROFIT_VIEW));
     const canSeeNotes =
@@ -103,6 +104,9 @@ export class CustomerProfileIntelligenceService {
     const canSeeSupport =
       !disabled.includes('receptionist') &&
       (await this.policies.actorCan(CAPABILITIES.VOICE_MANAGE));
+    const canSeeCredit =
+      !disabled.includes('credit') &&
+      (await this.policies.actorCan(CAPABILITIES.CREDIT_MANAGE));
     const now = new Date();
     const currentFrom = new Date(now.getTime() - WINDOW_DAYS * DAY_MS);
     const previousFrom = new Date(now.getTime() - 2 * WINDOW_DAYS * DAY_MS);
@@ -118,6 +122,7 @@ export class CustomerProfileIntelligenceService {
       notes,
       feedback,
       money,
+      creditEntries,
     ] = await Promise.all([
       disabled.includes('orders')
         ? null
@@ -239,6 +244,15 @@ export class CustomerProfileIntelligenceService {
             select: { lifetimeSpend: true },
           })
         : null,
+      canSeeCredit
+        ? client.creditEntry.groupBy({
+            by: ['kind'],
+            where: { businessId: customer.businessId, customerId },
+            _count: { _all: true },
+            _sum: { amount: true },
+            _max: { createdAt: true },
+          })
+        : null,
     ]);
     const exclusions = [
       ...(customer.status !== 'active' ? ['Customer is not active.'] : []),
@@ -297,7 +311,11 @@ export class CustomerProfileIntelligenceService {
             recordedLifetimeSpend: money ? Number(money.lifetimeSpend) : null,
             currency: business.currency,
           }
-        : { state: 'restricted', recordedLifetimeSpend: null, currency: null },
+        : {
+            state: disabled.includes('profit') ? 'module_disabled' : 'restricted',
+            recordedLifetimeSpend: null,
+            currency: null,
+          },
       score: {
         state: 'not_configured',
         value: null,
@@ -312,6 +330,35 @@ export class CustomerProfileIntelligenceService {
         monetary:
           'Customer.lifetimeSpend as stored by CRM, with the business currency; it is not recomputed from orders or netted for refunds here.',
       },
+    };
+    const creditBalance =
+      creditEntries?.reduce(
+        (balance, group) =>
+          balance +
+          (group.kind === 'credit' ? 1 : -1) *
+            Number(group._sum.amount ?? 0),
+        0,
+      ) ?? null;
+    const creditEntryCount = creditEntries
+      ? creditEntries.reduce((count, group) => count + group._count._all, 0)
+      : null;
+    const creditLastEntryAt =
+      creditEntries?.reduce<Date | null>((latest, group) => {
+        const timestamp = group._max.createdAt;
+        return timestamp && (!latest || timestamp > latest) ? timestamp : latest;
+      }, null) ?? null;
+    const credit = {
+      state: disabled.includes('credit')
+        ? 'module_disabled'
+        : creditBalance !== null
+          ? 'available'
+          : 'restricted',
+      balance: creditBalance,
+      currency: creditBalance === null ? null : business.currency,
+      entryCount: creditEntryCount,
+      lastEntryAt: creditLastEntryAt?.toISOString() ?? null,
+      definition:
+        'Recorded CreditEntry credit totals minus payment and write-off totals, grouped by canonical entry kind. The final balance is equivalent to the canonical ledger balance; order-level allocations are not implied. This is not an invoice balance or payment-provider settlement.',
     };
     const followUp =
       customer.status !== 'active'
@@ -494,7 +541,12 @@ export class CustomerProfileIntelligenceService {
             recordedLifetimeSpend: Number(money.lifetimeSpend),
             currency: business.currency,
           }
-        : { state: 'restricted', recordedLifetimeSpend: null, currency: null },
+        : {
+            state: disabled.includes('profit') ? 'module_disabled' : 'restricted',
+            recordedLifetimeSpend: null,
+            currency: null,
+          },
+      credit,
       marketing: {
         state: exclusions.length ? 'excluded' : 'requires_channel_check',
         exclusions,
@@ -533,6 +585,14 @@ export class CustomerProfileIntelligenceService {
             'Permission-checked recorded CRM value and business currency; not recomputed from orders or netted for refunds in this review.',
         },
         {
+          source: 'CreditEntry',
+          fields: ['kind', 'amount', 'createdAt'],
+          window:
+            credit.state === 'available'
+              ? 'All recorded customer credit, payment and write-off entries grouped into totals and latest-entry timestamp; only visible to users with Credit manage permission. Entry notes, payment methods and identifiers are excluded.'
+              : 'Restricted by Credit manage permission or unavailable because the Credit module is disabled.',
+        },
+        {
           source: 'Appointment',
           fields: ['status', 'startsAt'],
           window:
@@ -561,7 +621,7 @@ export class CustomerProfileIntelligenceService {
       ],
       limits: [
         'Partial deterministic Customer 360 summary. No customer-level data is sent to an AI model.',
-        'No credit balances, payment details, private note text, review text, full inbox conversations or inferred customer traits are included. Public ExternalReview records are not linked to individual customers and are not attributed.',
+        'Credit balances are included only for users with Credit manage permission. Payment-method details, private note text, review text, full inbox conversations or inferred customer traits are not included. Public ExternalReview records are not linked to individual customers and are not attributed.',
         'Historical imports, missing order history, seasonality and external purchases can affect the comparison. No calibrated churn probability or causal attribution is available.',
         'Loyalty counters and membership status are recorded state, not a new reward or entitlement decision.',
         'RFM source values are displayed without a combined score; scoring bands are not configured. Recency and frequency require the Orders module, and monetary value requires Profit view permission.',

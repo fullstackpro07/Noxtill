@@ -1604,7 +1604,7 @@ describe('CommerceSpecialistAgentService (MySQL)', () => {
         content: [
           {
             type: 'text',
-            text: `The QA product ${stamp} is recorded with its current inventory.`,
+            text: `## Answer\nThe QA product ${stamp} has the stock state returned by the product tool.\n## Evidence\nThe registered get_product tool returned the current product record from Products.\n## Calculation\nNot applicable; this answer reports the source state without calculating a metric.\n## Assumptions and gaps\nThis does not establish marketplace availability or a future stock position.\n## Confidence\nEvidence coverage is limited to the returned product record; this is not a calibrated probability.`,
           },
         ],
         stopReason: 'end_turn',
@@ -1632,7 +1632,7 @@ describe('CommerceSpecialistAgentService (MySQL)', () => {
     expect(result.status).toBe('completed');
     expect(result.output).toMatchObject({
       answerStatus: 'ready',
-      answer: `The QA product ${stamp} is recorded with its current inventory.`,
+      answer: `## Answer\nThe QA product ${stamp} has the stock state returned by the product tool.\n## Evidence\nThe registered get_product tool returned the current product record from Products.\n## Calculation\nNot applicable; this answer reports the source state without calculating a metric.\n## Assumptions and gaps\nThis does not establish marketplace availability or a future stock position.\n## Confidence\nEvidence coverage is limited to the returned product record; this is not a calibrated probability.`,
       tools: [
         {
           tool: 'get_product',

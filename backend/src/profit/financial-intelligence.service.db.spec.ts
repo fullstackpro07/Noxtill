@@ -2376,7 +2376,7 @@ describe('FinancialIntelligenceService (MySQL)', () => {
       data: {
         businessId: unrelatedBusinessId,
         agentKey: 'financial_intelligence',
-        agentVersion: '1.0.0',
+        agentVersion: '1.1.0',
         moduleId: '30',
         status: 'completed',
       },

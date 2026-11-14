@@ -187,6 +187,7 @@ export function SeoWorkspaceView() {
   const queue = useQuery({ queryKey: SEO_WORKSPACE_KEY, queryFn: fetchSeoWorkspace });
   const [tab, setTab] = useState<Tab>("queue");
   const [stage, setStage] = useState<WorkspaceStage | "all">("all");
+  const [agentQuestion, setAgentQuestion] = useState("");
   const history = useQuery({ queryKey: [...SEO_WORKSPACE_KEY, "history"], queryFn: fetchSeoWorkspaceHistory, enabled: tab === "history" });
   const agentRuns = useQuery({ queryKey: [...SEO_WORKSPACE_KEY, "agent-runs"], queryFn: fetchSeoAgentRuns });
   const contentOpportunities = useQuery({ queryKey: ["seo-content-opportunities"], queryFn: fetchContentOpportunities });
@@ -216,6 +217,7 @@ export function SeoWorkspaceView() {
   const items = (data?.items ?? []).filter((item) => stage === "all" || item.stage === stage);
   const latestAgentRun: SeoAgentRun | undefined = agentRuns.data?.[0];
   const agentOffPageRecords = latestAgentRun?.output?.snapshot?.offPageRecords;
+  const agentRankHistory = latestAgentRun?.output?.snapshot?.rankHistory;
   const hasTeamOffPageRecords = agentOffPageRecords
     ? agentOffPageRecords.trackedLinks +
         agentOffPageRecords.openTrackedOpportunities +
@@ -252,11 +254,41 @@ export function SeoWorkspaceView() {
             </p>
           </div>
           {canRunAgent && (
-            <button type="button" onClick={() => agentRun.mutate()} disabled={agentRun.isPending} className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-60" style={{ background: "var(--app-primary)" }}>
-              {agentRun.isPending ? "Reviewing…" : "Run agent review"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => agentRun.mutate(undefined)} disabled={agentRun.isPending} className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-60" style={{ background: "var(--app-primary)" }}>
+                {agentRun.isPending ? "Reviewing…" : "Run agent review"}
+              </button>
+            </div>
           )}
         </div>
+        {canRunAgent && (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label className="flex-1 text-xs font-semibold">
+              Ask about the saved SEO evidence
+              <textarea
+                value={agentQuestion}
+                onChange={(event) => setAgentQuestion(event.target.value)}
+                maxLength={1000}
+                rows={2}
+                placeholder="For example: Which tracked keywords have declined, and what evidence is available?"
+                className="mt-1 block w-full rounded-lg border px-3 py-2 text-xs font-normal"
+                style={{ background: "var(--app-surface-2)", borderColor: "var(--app-border)", color: "var(--app-text)" }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => agentRun.mutate(agentQuestion.trim())}
+              disabled={agentRun.isPending || agentQuestion.trim().length < 4}
+              className="rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50"
+              style={{ borderColor: "var(--app-border)", color: "var(--app-text)" }}
+            >
+              Ask SEO Agent
+            </button>
+          </div>
+        )}
+        <p className="mb-0 mt-2 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+          The agent answers only from the saved evidence in its review. Your question is sent to the configured AI provider for this answer; Noxtill stores only its hash in run metadata.
+        </p>
         {latestAgentRun?.output && (
           <div className="mt-3 rounded-xl p-3" style={{ background: "var(--app-surface-2)" }}>
             <p className="m-0 text-xs font-semibold">{latestAgentRun.recommendations[0]?.summary ?? latestAgentRun.output.summary}</p>
@@ -266,6 +298,56 @@ export function SeoWorkspaceView() {
                 <span>{latestAgentRun.output.snapshot.queueCounts.waitingApproval} waiting approval</span>
                 <span>{latestAgentRun.output.snapshot.queueCounts.verificationRequired} need verification</span>
                 <span>{latestAgentRun.output.snapshot.queueCounts.notMatched} not matched</span>
+              </div>
+            )}
+            {agentRankHistory && (
+              <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--app-border)" }}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px]" style={{ color: "var(--app-text-muted)" }}>
+                  <span>
+                    Rank snapshots: {agentRankHistory.keywordsWithSnapshots} / {agentRankHistory.trackedKeywordCount} keywords
+                    {agentRankHistory.trackedKeywordCount > 0 && ` · ${agentRankHistory.staleKeywordCount} stale`}
+                  </span>
+                  <span>
+                    {agentRankHistory.improving} improving · {agentRankHistory.declining} declining · {agentRankHistory.unchanged} unchanged
+                  </span>
+                  <Link href="/marketing/seo-autopilot/rank-tracking" className="font-bold underline">Open Rank Tracking</Link>
+                </div>
+                {agentRankHistory.observations.length > 0 ? (
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="w-full text-left text-[10.5px]">
+                      <thead style={{ color: "var(--app-text-faint)" }}>
+                        <tr>
+                          <th className="px-2 py-1 font-medium">Tracked keyword</th>
+                          <th className="px-2 py-1 font-medium">Latest rank</th>
+                          <th className="px-2 py-1 font-medium">Previous</th>
+                          <th className="px-2 py-1 font-medium">Movement</th>
+                          <th className="px-2 py-1 font-medium">Checked</th>
+                          <th className="px-2 py-1 font-medium">Search interest</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {agentRankHistory.observations.slice(0, 5).map((row) => (
+                          <tr key={row.keyword} className="border-t" style={{ borderColor: "var(--app-border)" }}>
+                            <td className="px-2 py-1.5 font-medium">{row.keyword}</td>
+                            <td className="px-2 py-1.5">{row.latestStatus === "not_checked" ? "Not checked" : row.latestStatus === "not_in_results" ? "Not in results" : row.latestRank}</td>
+                            <td className="px-2 py-1.5">{row.previousRank ?? "—"}</td>
+                            <td className="px-2 py-1.5 capitalize">{row.movement.replaceAll("_", " ")}</td>
+                            <td className="px-2 py-1.5">{row.capturedAt ? `${new Date(row.capturedAt).toLocaleDateString()} · ${row.freshness}` : "Not tracked"}</td>
+                            <td className="px-2 py-1.5">{row.searchInterestIndex === null ? "Not tracked" : `${row.searchInterestIndex} / 100 index`}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="mb-0 mt-1 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                      Positions are saved observations, not guaranteed results. Search interest is a relative Google Trends index, not monthly search volume.
+                      {agentRankHistory.truncated ? " Some tracked keywords are omitted from this review." : ""}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mb-0 mt-2 text-[10.5px]" style={{ color: "var(--app-text-faint)" }}>
+                    {agentRankHistory.trackedKeywordCount === 0 ? "No tracked keywords are configured." : "No rank snapshots are saved yet."}
+                  </p>
+                )}
               </div>
             )}
             {agentOffPageRecords && (
@@ -283,9 +365,9 @@ export function SeoWorkspaceView() {
               </div>
             )}
             {latestAgentRun.output.aiSummary && (
-              <p className="mb-0 mt-2 text-[11px]" style={{ color: "var(--app-text-muted)" }}>
-                Optional AI explanation · {latestAgentRun.output.aiSummary.status}: {latestAgentRun.output.aiSummary.text ?? latestAgentRun.output.aiSummary.message}
-              </p>
+              <div className="mb-0 mt-2 whitespace-pre-wrap text-[11px]" style={{ color: "var(--app-text-muted)" }}>
+                {latestAgentRun.output.aiSummary.mode === "question" ? "Question answer" : "Optional AI explanation"} · {latestAgentRun.output.aiSummary.status}: {latestAgentRun.output.aiSummary.text ?? latestAgentRun.output.aiSummary.message}
+              </div>
             )}
             <SpecialistAgentUsage calls={latestAgentRun.aiCallLogs} />
           </div>

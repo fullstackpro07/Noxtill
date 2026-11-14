@@ -83,6 +83,7 @@ export interface SpecialistAgentOperationsAgent {
   verificationOutcomes: {
     verified: number;
     failed: number;
+    unknown: number;
     verificationEvents: number;
     failedSharePercent: number | null;
   };
@@ -185,6 +186,10 @@ export interface SpecialistAgentOperations {
   agents: SpecialistAgentOperationsAgent[];
   securityEvents: {
     auditedCrossTenantRunProbeDenials: number;
+    auditedOrchestrationAuthorizationDenials: number;
+    auditedAgentToolAuthorizationDenials: number;
+    auditedActionCrossTenantProbeDenials: number;
+    auditedActionPolicyDenials: number;
     auditedCommerceToolCallBlocks: number;
     persistedToolCallRefusals: number;
     auditedCommerceApprovalRefusals: number;
@@ -243,6 +248,8 @@ export interface SpecialistAgentRunSummary {
     actions: number;
     toolCalls: number;
   };
+  detailsRedacted?: boolean;
+  detailsRedactionMessage?: string;
   outputRedacted: true;
   detailLocation: "canonical_module";
 }
@@ -287,6 +294,8 @@ export interface SpecialistAgentRunEvidenceList {
   nextCursor: string | null;
   pageSize: number;
   observedValuesRedacted: true;
+  detailsRedacted?: boolean;
+  detailsRedactionMessage?: string;
 }
 
 export interface SpecialistAgentRunEvent {
@@ -310,6 +319,8 @@ export interface SpecialistAgentRunEventList {
   hasMore: boolean;
   pageSize: number;
   payloadValuesRedacted: true;
+  detailsRedacted?: boolean;
+  detailsRedactionMessage?: string;
 }
 
 export interface SpecialistAgentToolCallRecord {
@@ -339,6 +350,8 @@ export interface SpecialistAgentToolCallList {
   hasMore: boolean;
   inputValuesRedacted: true;
   outputValuesRedacted: true;
+  detailsRedacted?: boolean;
+  detailsRedactionMessage?: string;
 }
 
 export interface SpecialistActionAuditEvent {
@@ -359,7 +372,7 @@ export interface SpecialistActionAuditRecord {
   actionType: string;
   expectedVersion: number | null;
   canonicalResourceType: string;
-  canonicalResourceId: string;
+  canonicalResourceId: string | null;
   canonicalOperationId: string | null;
   correlationId: string;
   state: string;
@@ -367,6 +380,7 @@ export interface SpecialistActionAuditRecord {
   reason: string;
   requiredApproval: boolean;
   requiredApproverRole: string | null;
+  approvalExpiresAt: string | null;
   approvalReason: string | null;
   rejectionReason: string | null;
   createdByUserId: string | null;
@@ -381,6 +395,8 @@ export interface SpecialistActionAuditRecord {
   verifiedAt: string | null;
   closedAt: string | null;
   events: SpecialistActionAuditEvent[];
+  detailsRedacted?: boolean;
+  detailsRedactionMessage?: string;
 }
 
 export interface SpecialistActionAudit {
@@ -494,7 +510,7 @@ export type SpecialistActionDecisionInput = {
 
 export function decideSpecialistAgentAction(
   actionId: string,
-  operation: "approve" | "reject" | "execute" | "cancel" | "source-rfq",
+  operation: "approve" | "reject" | "execute" | "cancel" | "source-rfq" | "resolve",
   input?: SpecialistActionDecisionInput,
 ): Promise<unknown> {
   return apiFetch(`/agent-actions/${encodeURIComponent(actionId)}/${operation}`, {
@@ -511,7 +527,7 @@ export function downloadSpecialistActionAuditCsv(audit: SpecialistActionAudit): 
   const columns = [
     "action_id", "run_id", "agent_key", "module_id", "action_type", "expected_version", "resource_type",
     "resource_id", "canonical_operation_id", "correlation_id", "state", "risk_tier",
-    "reason", "approval_required", "required_approver_role", "approval_reason",
+    "reason", "approval_required", "required_approver_role", "approval_expires_at", "approval_reason",
     "rejection_reason", "created_by_user_id", "approved_by_user_id", "executed_by_user_id",
     "execution_attempt_count", "error_code", "action_created_at", "action_updated_at",
     "approved_at", "executed_at", "verified_at", "closed_at", "event_type",
@@ -524,7 +540,7 @@ export function downloadSpecialistActionAuditCsv(audit: SpecialistActionAudit): 
       action.id, action.runId, action.agentKey, action.moduleId, action.actionType, action.expectedVersion,
       action.canonicalResourceType, action.canonicalResourceId, action.canonicalOperationId,
       action.correlationId, action.state, action.riskTier, action.reason, action.requiredApproval,
-      action.requiredApproverRole, action.approvalReason, action.rejectionReason,
+      action.requiredApproverRole, action.approvalExpiresAt, action.approvalReason, action.rejectionReason,
       action.createdByUserId, action.approvedByUserId, action.executedByUserId,
       action.executionAttemptCount, action.errorCode, action.createdAt, action.updatedAt,
       action.approvedAt, action.executedAt, action.verifiedAt, action.closedAt,

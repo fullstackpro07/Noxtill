@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import {
   SPECIALIST_AGENT_ORCHESTRATION_QUEUE,
   SPECIALIST_AGENT_ORCHESTRATION_RECOVERY_PATTERN,
+  SPECIALIST_AGENT_ACTION_EXPIRY_PATTERN,
   SPECIALIST_AGENT_RETENTION_PATTERN,
 } from './specialist-agent-orchestration.constants';
 
@@ -35,6 +36,21 @@ export class SpecialistAgentOrchestrationScheduler implements OnModuleInit {
       .catch((error: Error) =>
         this.logger.error(
           `Failed to register specialist orchestration recovery tick: ${error.message}`,
+        ),
+      );
+    this.queue
+      .add(
+        'approval-expiry',
+        {},
+        {
+          repeat: { pattern: SPECIALIST_AGENT_ACTION_EXPIRY_PATTERN, tz: 'UTC' },
+          jobId: 'specialist-agent-action-approval-expiry',
+          removeOnComplete: true,
+        },
+      )
+      .catch((error: Error) =>
+        this.logger.error(
+          `Failed to register specialist-agent approval-expiry tick: ${error.message}`,
         ),
       );
     this.queue

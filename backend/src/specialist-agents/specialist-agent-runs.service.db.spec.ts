@@ -2,6 +2,7 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
+import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
 import { AppException } from '../common/filters/app.exception';
 import {
   recordSpecialistAgentRunCreatedEvent,
@@ -37,6 +38,7 @@ describe('SpecialistAgentRunsService (MySQL)', () => {
     cls = new FakeClsService();
     service = new SpecialistAgentRunsService(
       new TenantPrismaService(prisma, cls as unknown as ClsService),
+      new SpecialistAgentPolicyService(prisma, cls as unknown as ClsService),
     );
     businessId = (
       await prisma.business.create({

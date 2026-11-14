@@ -81,7 +81,11 @@ export class ReorderSuggestionsService {
   async list(
     businessId: string,
     configuredLeadTimeDays?: number,
-    options: { includeCovered?: boolean } = {},
+    options: {
+      includeCovered?: boolean;
+      includeProcurement?: boolean;
+      includeBranches?: boolean;
+    } = {},
   ): Promise<ReorderSuggestionGroup[]> {
     const leadTimeDays =
       configuredLeadTimeDays ??
@@ -108,12 +112,18 @@ export class ReorderSuggestionsService {
 
     const productIds = rows.map((row) => row.id);
     const incomingByProduct = new Map<string, number>();
-    const transferAvailability = await branchTransferAvailability(
-      this.prisma,
-      businessId,
-      rows.map(({ id, sku }) => ({ id, sku })),
-    );
-    if (productIds.length > 0) {
+    const transferAvailability =
+      options.includeBranches === false
+        ? new Map<
+            string,
+            { committedOutboundQty: number; incomingQty: number }
+          >()
+        : await branchTransferAvailability(
+            this.prisma,
+            businessId,
+            rows.map(({ id, sku }) => ({ id, sku })),
+          );
+    if (productIds.length > 0 && options.includeProcurement !== false) {
       const openOrders = await this.tenantPrisma.client.purchaseOrder.findMany({
         where: {
           businessId,
@@ -211,10 +221,13 @@ export class ReorderSuggestionsService {
     }
     if (items.length === 0) return [];
 
-    const supplierByProduct = await this.mostRecentSupplierByProduct(
-      businessId,
-      items.map((i) => i.productId),
-    );
+    const supplierByProduct: Record<string, string> =
+      options.includeProcurement === false
+        ? {}
+        : await this.mostRecentSupplierByProduct(
+            businessId,
+            items.map((i) => i.productId),
+          );
 
     const supplierIds = [...new Set(Object.values(supplierByProduct))];
     const suppliers = supplierIds.length

@@ -17,6 +17,8 @@ import { BillingService } from '../billing/billing.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { RETURN_ERROR_CODES } from './returns.constants';
 import {
+  CUSTOMER_RETURN_APPROVED_EVENT_JOB,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
   FINANCE_RETURN_APPROVED_EVENT_JOB,
   SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE,
 } from '../common/agents/specialist-agent-events.constants';
@@ -47,6 +49,9 @@ export class ReturnsService {
     @Optional()
     @InjectQueue(SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE)
     private readonly financeAgentEvents?: Queue,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly customerAgentEvents?: Queue,
   ) {}
 
   async create(businessId: string, dto: CreateReturnDto) {
@@ -261,6 +266,7 @@ export class ReturnsService {
     // This is a read-only follow-up to the canonical approval. The worker uses the approved
     // Return row and never claims that approval alone proves settlement or cash payout.
     await this.queueApprovedReturnFinanceReview(updated);
+    await this.queueApprovedReturnCustomerReview(updated);
 
     // Best-effort, outside the transaction — same convention as OrdersService.createSale's
     // post-commit cash-register hook: not every business runs a cash register at all.
@@ -312,6 +318,47 @@ export class ReturnsService {
       // Queue failure must never roll back a completed return/refund approval.
       this.logger.warn(
         `Could not queue Finance review for approved return ${returned.id}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  private async queueApprovedReturnCustomerReview(returned: {
+    id: string;
+    businessId: string;
+    updatedAt: Date;
+  }): Promise<void> {
+    if (!this.customerAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: returned.businessId },
+        select: { id: true, policies: true },
+      });
+      if (
+        !business ||
+        !resolvePolicies(business).bool(
+          'agents.customerReturnApprovedEventReviewEnabled',
+        )
+      ) {
+        return;
+      }
+      await this.customerAgentEvents.add(
+        CUSTOMER_RETURN_APPROVED_EVENT_JOB,
+        {
+          businessId: returned.businessId,
+          returnId: returned.id,
+          approvedAt: returned.updatedAt.toISOString(),
+        },
+        {
+          jobId: `customer-return-approved-${returned.businessId}-${returned.id}-${returned.updatedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Customer review for approved return ${returned.id}: ${(error as Error).message}`,
       );
     }
   }

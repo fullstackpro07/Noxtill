@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { Queue } from 'bullmq';
 import {
   CommerceBomStatus,
   CommerceWorkOrderStatus,
@@ -9,6 +11,11 @@ import {
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { COMMERCE_PRODUCTION_ERROR_CODES as CODES } from './commerce.constants';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  COMMERCE_PRODUCTION_WORK_ORDER_COMPLETED_EVENT_JOB,
+  SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 import type {
   CompleteCommerceWorkOrderDto,
   CreateCommerceBomDto,
@@ -55,7 +62,51 @@ function isUniqueViolation(error: unknown): boolean {
  */
 @Injectable()
 export class CommerceProductionService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  private readonly logger = new Logger(CommerceProductionService.name);
+
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_COMMERCE_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
+  ) {}
+
+  private async queueCompletedWorkOrderReview(
+    businessId: string,
+    workOrderId: string,
+    completedAt: Date,
+  ): Promise<void> {
+    if (!this.specialistAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      if (
+        !business ||
+        !resolvePolicies(business).bool(
+          'agents.commerceProductionEventReviewEnabled',
+        )
+      ) {
+        return;
+      }
+      await this.specialistAgentEvents.add(
+        COMMERCE_PRODUCTION_WORK_ORDER_COMPLETED_EVENT_JOB,
+        { businessId, workOrderId, completedAt: completedAt.toISOString() },
+        {
+          jobId: `commerce-production-completed-${businessId}-${workOrderId}-${completedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Commerce review for completed production work order ${workOrderId}: ${(error as Error).message}`,
+      );
+    }
+  }
 
   private async physicalProduct(businessId: string, id: string) {
     const product = await this.tenantPrisma.client.product.findFirst({
@@ -173,7 +224,7 @@ export class CommerceProductionService {
       );
     }
 
-    return this.tenantPrisma.client.$transaction(async (tx) => {
+    const updated = await this.tenantPrisma.client.$transaction(async (tx) => {
       const latest = await tx.commerceBom.findFirst({
         where: { businessId, productId: dto.productId },
         orderBy: { version: 'desc' },
@@ -581,7 +632,7 @@ export class CommerceProductionService {
     }
     const label = `Work order WO-${workOrder.number}`;
 
-    return this.tenantPrisma.client.$transaction(async (tx) => {
+    const updated = await this.tenantPrisma.client.$transaction(async (tx) => {
       let componentCost = 0;
       for (const material of workOrder.materials) {
         const component = await tx.product.findFirst({
@@ -674,6 +725,14 @@ export class CommerceProductionService {
       });
       return updated;
     });
+    if (updated.status === CommerceWorkOrderStatus.completed) {
+      await this.queueCompletedWorkOrderReview(
+        updated.businessId,
+        updated.id,
+        updated.updatedAt,
+      );
+    }
+    return updated;
   }
 
   private async receiveOutput(
@@ -722,7 +781,7 @@ export class CommerceProductionService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    return this.tenantPrisma.client.$transaction(async (tx) => {
+    const updated = await this.tenantPrisma.client.$transaction(async (tx) => {
       if (dto.qtyReleased > 0) {
         await this.receiveOutput(
           tx as unknown as Tx,
@@ -757,6 +816,12 @@ export class CommerceProductionService {
       });
       return updated;
     });
+    await this.queueCompletedWorkOrderReview(
+      updated.businessId,
+      updated.id,
+      updated.updatedAt,
+    );
+    return updated;
   }
 
   async cancel(

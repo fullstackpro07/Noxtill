@@ -11,12 +11,16 @@ import {
   createSpecialistAgentAction,
   specialistAgentActionIdempotencyHash,
 } from '../common/agents/specialist-agent-action.util';
-import { recordSpecialistAgentRunCreatedEvent } from '../common/agents/specialist-agent-run-events.util';
+import {
+  recordSpecialistAgentRunCreatedEvent,
+  recordSpecialistAgentRunStartedEvent,
+} from '../common/agents/specialist-agent-run-events.util';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { AppException } from '../common/filters/app.exception';
 import { parseDisabled } from '../business-modules/business-modules.service';
 import { createOrReuseSpecialistAgentRun } from '../common/agents/specialist-agent-run-idempotency.util';
 import { recordSpecialistAgentRunTerminalEvent } from '../common/agents/specialist-agent-run-events.util';
+import { CUSTOMER_AGENT_MESSAGE_SEND_IDEMPOTENCY_PREFIX } from '../common/agents/specialist-agent-events.constants';
 import { ensureSpecialistAgentConfigVersion } from '../common/agents/specialist-agent-config.util';
 import { LAPSED_DAYS } from './jobs/crm-jobs.constants';
 import {
@@ -29,7 +33,8 @@ import {
 } from './dto/customer-agent-actions.dto';
 
 const MESSAGE_DRAFT_PREFIX = 'customer_agent:';
-const MESSAGE_SEND_IDEMPOTENCY_PREFIX = 'customer-agent-draft:';
+const MESSAGE_SEND_IDEMPOTENCY_PREFIX =
+  CUSTOMER_AGENT_MESSAGE_SEND_IDEMPOTENCY_PREFIX;
 const CUSTOMER_AGENT_KEY = 'customer_intelligence';
 const CUSTOMER_AGENT_VERSION = '1.0.0';
 const CUSTOMER_EVENT_FOLLOW_UP_SOURCES = {
@@ -1165,6 +1170,7 @@ export class CustomerAgentActionsService {
         this.tenant.client.$transaction(async (tx) => {
           const run = await tx.specialistAgentRun.create({ data });
           await recordSpecialistAgentRunCreatedEvent(tx, run);
+          await recordSpecialistAgentRunStartedEvent(tx, run);
           return run;
         }),
       (keyBusinessId, agentKey, idempotencyKeyHash) =>

@@ -18,6 +18,7 @@ import { SpecialistAgentDirectoryService } from './specialist-agent-directory.se
 import { SpecialistAgentRunsController } from './specialist-agent-runs.controller';
 import { SpecialistAgentRunsService } from './specialist-agent-runs.service';
 import { SpecialistAgentRetentionService } from './specialist-agent-retention.service';
+import { SpecialistAgentActionExpiryService } from './specialist-agent-action-expiry.service';
 import { SPECIALIST_AGENT_ORCHESTRATION_QUEUE } from './specialist-agent-orchestration.constants';
 
 @Module({
@@ -43,6 +44,7 @@ import { SPECIALIST_AGENT_ORCHESTRATION_QUEUE } from './specialist-agent-orchest
     SpecialistAgentDirectoryService,
     SpecialistAgentRunsService,
     SpecialistAgentRetentionService,
+    SpecialistAgentActionExpiryService,
     SpecialistAgentOrchestrationProcessor,
     SpecialistAgentOrchestrationScheduler,
   ],

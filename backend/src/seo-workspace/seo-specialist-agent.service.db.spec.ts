@@ -1,4 +1,5 @@
 import { ClsService } from 'nestjs-cls';
+import { ConfigService } from '@nestjs/config';
 import { IntegrationProvider, IntegrationStatus } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +19,8 @@ import { SeoSearchConsoleService } from './seo-search-console.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { ConnectorRegistry } from '../integrations/connector-registry';
 import { SeoAnalyticsAttributionService } from './seo-analytics-attribution.service';
+import { SeoReportsService } from './seo-reports.service';
+import { SeoSettingsService } from './seo-settings.service';
 
 class FakeClsService {
   private readonly store: Record<string, unknown> = {};
@@ -53,6 +56,16 @@ describe('SeoSpecialistAgentService (MySQL)', () => {
     const content = new SeoContentService(tenant, contentAi);
     const onPage = new SeoOnPageService(tenant, onPageAi);
     const technical = new SeoTechnicalService(tenant);
+    const searchConsole = new SeoSearchConsoleService(
+      tenant,
+      {} as IntegrationsService,
+      { get: () => ({}) } as unknown as ConnectorRegistry,
+    );
+    const analyticsAttribution = new SeoAnalyticsAttributionService(
+      tenant,
+      {} as IntegrationsService,
+      { get: () => ({}) } as unknown as ConnectorRegistry,
+    );
     service = new SeoSpecialistAgentService(
       tenant,
       new SeoAgentWorkspaceService(tenant),
@@ -61,15 +74,12 @@ describe('SeoSpecialistAgentService (MySQL)', () => {
       content,
       onPage,
       technical,
-      new SeoSearchConsoleService(
+      searchConsole,
+      analyticsAttribution,
+      new SeoReportsService(tenant, analyticsAttribution),
+      new SeoSettingsService(
         tenant,
-        {} as IntegrationsService,
-        { get: () => ({}) } as unknown as ConnectorRegistry,
-      ),
-      new SeoAnalyticsAttributionService(
-        tenant,
-        {} as IntegrationsService,
-        { get: () => ({}) } as unknown as ConnectorRegistry,
+        { get: () => undefined } as unknown as ConfigService,
       ),
       new SpecialistAgentToolGatewayService(tenant),
     );
@@ -226,7 +236,7 @@ describe('SeoSpecialistAgentService (MySQL)', () => {
     const run = await service.run(businessId, 'seo-agent-test-actor');
     expect(run).toMatchObject({
       agentKey: 'seo_autopilot',
-      agentVersion: '1.0.0',
+      agentVersion: '1.3.0',
       moduleId: '28',
       status: 'completed',
       recommendations: [
@@ -317,6 +327,46 @@ describe('SeoSpecialistAgentService (MySQL)', () => {
         inputFields: [],
         correlationId: run.id,
       },
+      {
+        toolKey: 'get_rank_history',
+        moduleId: '28',
+        status: 'succeeded',
+        sequence: 5,
+        inputFields: [],
+        correlationId: run.id,
+      },
+      {
+        toolKey: 'get_crawl_findings',
+        moduleId: '28',
+        status: 'succeeded',
+        sequence: 6,
+        inputFields: [],
+        correlationId: run.id,
+      },
+      {
+        toolKey: 'get_seo_action_outcomes',
+        moduleId: '28',
+        status: 'succeeded',
+        sequence: 7,
+        inputFields: [],
+        correlationId: run.id,
+      },
+      {
+        toolKey: 'get_competitor_seo_evidence',
+        moduleId: '28',
+        status: 'succeeded',
+        sequence: 8,
+        inputFields: [],
+        correlationId: run.id,
+      },
+      {
+        toolKey: 'get_seo_settings',
+        moduleId: '28',
+        status: 'succeeded',
+        sequence: 9,
+        inputFields: [],
+        correlationId: run.id,
+      },
     ]);
     const aiPayload = JSON.stringify(createMessage.mock.calls[0]);
     expect(aiPayload).not.toContain('seo-fixture.example');
@@ -347,7 +397,7 @@ describe('SeoSpecialistAgentService (MySQL)', () => {
       data: {
         businessId: otherBusinessId,
         agentKey: 'seo_autopilot',
-        agentVersion: '1.0.0',
+        agentVersion: '1.3.0',
         moduleId: '28',
         status: 'completed',
       },
@@ -461,7 +511,7 @@ describe('SeoSpecialistAgentService (MySQL)', () => {
 
     expect(run.output).toMatchObject({
       coverage:
-        'workspace_queue_search_console_google_analytics_and_merchant_entered_off_page_records',
+        'workspace_queue_saved_crawl_findings_rank_history_search_console_google_analytics_action_outcomes_competitor_evidence_settings_and_merchant_entered_off_page_records',
       snapshot: {
         offPageRecords: {
           source: 'merchant_entered_records',
@@ -576,7 +626,7 @@ describe('SeoSpecialistAgentService (MySQL)', () => {
     );
     expect(run.output).toMatchObject({
       coverage:
-        'workspace_queue_search_console_google_analytics_and_merchant_entered_off_page_records',
+        'workspace_queue_saved_crawl_findings_rank_history_search_console_google_analytics_action_outcomes_competitor_evidence_settings_and_merchant_entered_off_page_records',
       snapshot: {
         searchPerformance: {
           trackedKeywordSummary: {

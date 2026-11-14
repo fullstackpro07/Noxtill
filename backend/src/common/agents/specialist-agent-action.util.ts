@@ -13,6 +13,9 @@ type SpecialistAgentActionClient = Pick<
   | '$queryRaw'
 >;
 
+const DEFAULT_SPECIALIST_ACTION_APPROVAL_TTL_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 async function nextActionEventSequence(
   tx: SpecialistAgentActionClient,
   actionId: string,
@@ -109,6 +112,9 @@ export async function createSpecialistAgentAction(
   });
   const maxActionsPerRun =
     resolvePolicies(business).num('agents.maxMaterialActionsPerRun') ?? 10;
+  const approvalTtlDays =
+    resolvePolicies(business).num('agents.specialistActionApprovalTtlDays') ??
+    DEFAULT_SPECIALIST_ACTION_APPROVAL_TTL_DAYS;
   const existingCount = await tx.specialistAgentAction.count({
     where: {
       businessId: input.data.businessId,
@@ -123,7 +129,16 @@ export async function createSpecialistAgentAction(
     );
   }
 
-  const action = await tx.specialistAgentAction.create({ data: input.data });
+  const action = await tx.specialistAgentAction.create({
+    data: {
+      ...input.data,
+      ...(input.data.state === 'approval_required'
+        ? {
+            approvalExpiresAt: new Date(Date.now() + approvalTtlDays * DAY_MS),
+          }
+        : {}),
+    },
+  });
   await tx.specialistAgentActionEvent.create({
     data: {
       businessId: action.businessId,
@@ -140,6 +155,7 @@ export async function createSpecialistAgentAction(
         canonicalResourceId: action.canonicalResourceId,
         maxActionsPerRun,
         actionCountForRun: existingCount + 1,
+        approvalExpiresAt: action.approvalExpiresAt?.toISOString() ?? null,
       },
     },
   });
@@ -158,6 +174,8 @@ export async function transitionSpecialistAgentAction(
     reason?: string;
     metadata?: Prisma.InputJsonObject;
     update?: Prisma.SpecialistAgentActionUpdateManyMutationInput;
+    approvalExpiresAtLte?: Date;
+    updatedAtLte?: Date;
   },
 ) {
   if (!SPECIALIST_AGENT_ACTION_STATES[input.fromState].includes(input.toState as never)) {
@@ -168,13 +186,33 @@ export async function transitionSpecialistAgentAction(
     );
   }
 
+  let approvalExpiresAt: Date | undefined;
+  if (input.toState === 'approval_required') {
+    const business = await tx.business.findUnique({
+      where: { id: input.businessId },
+      select: { policies: true },
+    });
+    const ttlDays =
+      resolvePolicies(business).num('agents.specialistActionApprovalTtlDays') ??
+      DEFAULT_SPECIALIST_ACTION_APPROVAL_TTL_DAYS;
+    approvalExpiresAt = new Date(Date.now() + ttlDays * DAY_MS);
+  }
+
   const updated = await tx.specialistAgentAction.updateMany({
     where: {
       id: input.actionId,
       businessId: input.businessId,
       state: input.fromState,
+      ...(input.approvalExpiresAtLte
+        ? { approvalExpiresAt: { lte: input.approvalExpiresAtLte } }
+        : {}),
+      ...(input.updatedAtLte ? { updatedAt: { lte: input.updatedAtLte } } : {}),
     },
-    data: { ...input.update, state: input.toState },
+    data: {
+      ...input.update,
+      ...(approvalExpiresAt ? { approvalExpiresAt } : {}),
+      state: input.toState,
+    },
   });
   if (updated.count !== 1) {
     throw new AppException(
@@ -194,7 +232,12 @@ export async function transitionSpecialistAgentAction(
       toState: input.toState,
       actorUserId: input.actorUserId ?? null,
       reason: input.reason,
-      metadata: input.metadata ?? {},
+      metadata: {
+        ...(input.metadata ?? {}),
+        ...(approvalExpiresAt
+          ? { approvalExpiresAt: approvalExpiresAt.toISOString() }
+          : {}),
+      },
     },
   });
 }

@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import {
   fetchSeoReport,
+  saveSeoOutcomeSnapshots,
   type RankBuckets,
   type ReportMetric,
   type ReportSection,
+  type SeoReport,
 } from "@/lib/seo-reports-api";
 
 const SECTIONS: { key: ReportSection | "summary"; label: string }[] = [
@@ -31,6 +33,32 @@ const BUCKETS: { key: keyof RankBuckets; label: string }[] = [
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
+}
+
+function landingPageReadout(
+  outcome: SeoReport["actionLandingPageOutcomes"][number],
+  period: "comparison" | "current",
+): ReactNode {
+  const result = outcome[period];
+  if (result.rows.length === 0) {
+    return <span style={{ color: "var(--app-text-faint)" }}>{result.reason ?? "Not available"}</span>;
+  }
+  return (
+    <div className="space-y-1">
+      {result.rows.map((row, index) => (
+        <p key={`${row.landingPage}:${index}`} className="m-0">
+          <span className="font-mono text-[10px]">{row.landingPage}</span>
+          <br />
+          Sessions {row.sessions ?? "Not returned"} · Key events{" "}
+          {row.keyEvents ?? "Not returned"} · Revenue{" "}
+          {row.totalRevenue ?? "Not returned"}
+          {outcome.currencyCode
+            ? ` ${outcome.currencyCode}`
+            : " (currency not reported)"}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 function format(value: number | null, unit?: ReportMetric["unit"]) {
@@ -160,9 +188,15 @@ function exportCsv(metrics: ReportMetric[], days: number) {
 export function SeoReportsView() {
   const [days, setDays] = useState(30);
   const [section, setSection] = useState<ReportSection | "summary">("summary");
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["seo-report", days],
     queryFn: () => fetchSeoReport(days),
+  });
+  const saveSnapshots = useMutation({
+    mutationFn: () => saveSeoOutcomeSnapshots(days),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["seo-report", days] }),
   });
   const data = query.data;
   const metrics = (data?.metrics ?? []).filter(
@@ -472,6 +506,249 @@ export function SeoReportsView() {
             />
           </div>
         )}
+        {(section === "summary" || section === "content") && (
+          <section
+            className="overflow-x-auto rounded-xl border p-3"
+            style={{ borderColor: "var(--app-border)" }}
+          >
+            <p className="m-0 text-xs font-bold">Tracked rank after recorded content publication</p>
+            <p className="m-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+              This compares the keyword rank saved at publication with the latest saved check after that date. It is site-level movement, not proof that the content caused a change or the page&rsquo;s exact position.
+            </p>
+            {data.contentRankOutcomes.length === 0 ? (
+              <p className="mb-0 mt-3 text-xs" style={{ color: "var(--app-text-faint)" }}>
+                No published content with a tracked keyword in this report period.
+              </p>
+            ) : (
+              <table className="mt-2 w-full min-w-[760px] text-left text-xs">
+                <thead style={{ color: "var(--app-text-faint)" }}>
+                  <tr>
+                    {[
+                      "Published content",
+                      "Tracked keyword",
+                      "Publish-time rank",
+                      "Latest after publication",
+                      "Observed movement",
+                      "Page confirmation",
+                    ].map((heading) => (
+                      <th key={heading} className="px-2 py-2 font-semibold">{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.contentRankOutcomes.map((row) => (
+                    <tr key={row.briefId} className="border-t align-top" style={{ borderColor: "var(--app-border)" }}>
+                      <td className="px-2 py-2">
+                        <p className="m-0 font-semibold">{row.topic}</p>
+                        <p className="m-0 mt-1" style={{ color: "var(--app-text-faint)" }}>
+                          {row.publishedAt ? formatDate(row.publishedAt) : "Publish date unavailable"}
+                        </p>
+                      </td>
+                      <td className="px-2 py-2">{row.keyword ?? "Not linked"}</td>
+                      <td className="px-2 py-2">{row.baselineRank === null ? "Not available" : `#${row.baselineRank}`}</td>
+                      <td className="px-2 py-2">
+                        {row.measuredAt
+                          ? row.measuredRank === null
+                            ? `Not in results · ${formatDate(row.measuredAt)}`
+                            : `#${row.measuredRank} · ${formatDate(row.measuredAt)}`
+                          : "No post-publication check"}
+                      </td>
+                      <td className="px-2 py-2">
+                        {row.rankChange === null
+                          ? row.state === "observed" && row.baselineRank === null
+                            ? "Baseline not in results"
+                            : row.state.replaceAll("_", " ")
+                          : row.rankChange > 0
+                            ? `Improved by ${row.rankChange} positions`
+                            : row.rankChange < 0
+                              ? `Declined by ${Math.abs(row.rankChange)} positions`
+                              : "No observed movement"}
+                      </td>
+                      <td className="px-2 py-2">{row.liveConfirmedAt ? `URL seen in crawl · ${formatDate(row.liveConfirmedAt)}` : "URL not confirmed by crawl"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {data.contentRankOutcomes.length === 100 && (
+              <p className="mb-0 mt-2 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                Showing the 100 most recently published entries in this period.
+              </p>
+            )}
+          </section>
+        )}
+        {(section === "summary" || section === "actions") && (
+          <section
+            className="overflow-x-auto rounded-xl border p-3"
+            style={{ borderColor: "var(--app-border)" }}
+          >
+            <p className="m-0 text-xs font-bold">GA4 Organic Search by action page</p>
+            <p className="m-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+              Exact page-path matches from the selected Google Analytics property. Query strings are ignored. The saved comparison and current periods are property context, not action-timed results or proof of causation.
+            </p>
+            {data.actionLandingPageOutcomes.length === 0 ? (
+              <p className="mb-0 mt-3 text-xs" style={{ color: "var(--app-text-faint)" }}>
+                No applied On-Page or Technical changes were recorded in this report period.
+              </p>
+            ) : (
+              <table className="mt-2 w-full min-w-[900px] text-left text-xs">
+                <thead style={{ color: "var(--app-text-faint)" }}>
+                  <tr>
+                    {["Applied page", "Applied", "GA4 property", "Comparison period", "Current period"].map((heading) => (
+                      <th key={heading} className="px-2 py-2 font-semibold">{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.actionLandingPageOutcomes.map((outcome) => (
+                    <tr key={`${outcome.kind}:${outcome.actionId}`} className="border-t align-top" style={{ borderColor: "var(--app-border)" }}>
+                      <td className="px-2 py-2">
+                        <p className="m-0 font-semibold">{outcome.label}</p>
+                        <p className="m-0 mt-1 max-w-[220px] truncate font-mono text-[10px]" style={{ color: "var(--app-text-faint)" }}>{outcome.targetPath ?? "Page path unavailable"}</p>
+                      </td>
+                      <td className="px-2 py-2">{formatDate(outcome.appliedAt)}</td>
+                      <td className="px-2 py-2">{outcome.propertyName ?? outcome.property ?? "Not connected"}</td>
+                      <td className="max-w-[290px] px-2 py-2">
+                        <p className="m-0 mb-1 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                          {outcome.comparisonPeriod ? `${outcome.comparisonPeriod.startDate} – ${outcome.comparisonPeriod.endDate}` : "Period unavailable"}
+                        </p>
+                        {landingPageReadout(outcome, "comparison")}
+                      </td>
+                      <td className="max-w-[290px] px-2 py-2">
+                        <p className="m-0 mb-1 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                          {outcome.currentPeriod ? `${outcome.currentPeriod.startDate} – ${outcome.currentPeriod.endDate}` : "Period unavailable"}
+                        </p>
+                        {landingPageReadout(outcome, "current")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {data.actionLandingPageOutcomes[0] && (
+              <p className="mb-0 mt-2 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                {data.actionLandingPageOutcomes[0].disclosure}
+              </p>
+            )}
+          </section>
+        )}
+        {(section === "summary" || section === "actions") && (
+          <section
+            className="overflow-x-auto rounded-xl border p-3"
+            style={{ borderColor: "var(--app-border)" }}
+          >
+            <p className="m-0 text-xs font-bold">Tracked rank around applied SEO changes</p>
+            <p className="m-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+              Rank checks before and after an applied change are shown when a tracked keyword maps by its saved keyword or target URL. These comparisons are descriptive, not causal.
+            </p>
+            {data.actionRankOutcomes.length === 0 ? (
+              <p className="mb-0 mt-3 text-xs" style={{ color: "var(--app-text-faint)" }}>
+                No applied On-Page or Technical changes were recorded in this report period.
+              </p>
+            ) : (
+              <table className="mt-2 w-full min-w-[820px] text-left text-xs">
+                <thead style={{ color: "var(--app-text-faint)" }}>
+                  <tr>
+                    {[
+                      "Applied change",
+                      "Tracked keyword",
+                      "Applied",
+                      "Previous check",
+                      "Latest after change",
+                      "Observed movement",
+                      "Crawl status",
+                    ].map((heading) => (
+                      <th key={heading} className="px-2 py-2 font-semibold">{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.actionRankOutcomes.map((row) => (
+                    <tr key={`${row.kind}:${row.actionId}`} className="border-t align-top" style={{ borderColor: "var(--app-border)" }}>
+                      <td className="px-2 py-2">
+                        <p className="m-0 font-semibold">{row.label}</p>
+                        <p className="m-0 mt-1 max-w-[240px] truncate font-mono text-[10px]" style={{ color: "var(--app-text-faint)" }}>{row.targetUrl}</p>
+                      </td>
+                      <td className="px-2 py-2">{row.keyword ?? "Not mapped"}</td>
+                      <td className="px-2 py-2">{formatDate(row.appliedAt)}</td>
+                      <td className="px-2 py-2">
+                        {row.baselineCheckedAt
+                          ? `${row.baselineRank === null ? "Not in results" : `#${row.baselineRank}`} · ${formatDate(row.baselineCheckedAt)}`
+                          : "No prior check"}
+                      </td>
+                      <td className="px-2 py-2">
+                        {row.measuredAt
+                          ? `${row.measuredRank === null ? "Not in results" : `#${row.measuredRank}`} · ${formatDate(row.measuredAt)}`
+                          : "No later check"}
+                      </td>
+                      <td className="px-2 py-2">
+                        {row.rankChange === null
+                          ? row.state.replaceAll("_", " ")
+                          : row.rankChange > 0
+                            ? `Improved by ${row.rankChange} positions`
+                            : row.rankChange < 0
+                              ? `Declined by ${Math.abs(row.rankChange)} positions`
+                              : "No observed movement"}
+                      </td>
+                      <td className="px-2 py-2">{row.verifiedAt ? `Verified by crawl · ${formatDate(row.verifiedAt)}` : "Not confirmed by crawl"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {data.actionRankOutcomes.length === 100 && (
+              <p className="mb-0 mt-2 text-[10px]" style={{ color: "var(--app-text-faint)" }}>
+                Showing the 100 most recently applied changes in this period.
+              </p>
+            )}
+          </section>
+        )}
+        {(section === "summary" || section === "actions") && (
+          <section
+            className="overflow-x-auto rounded-xl border p-3"
+            style={{ borderColor: "var(--app-border)" }}
+          >
+            <p className="m-0 text-xs font-bold">Saved outcome snapshots</p>
+            <p className="m-0 mt-1 text-[11px]" style={{ color: "var(--app-text-faint)" }}>
+              These are immutable copies of the saved rank checks shown above. They preserve what was observed at capture time; they do not prove causation or exact page position.
+            </p>
+            {data.savedOutcomeSnapshots.length === 0 ? (
+              <p className="mb-0 mt-3 text-xs" style={{ color: "var(--app-text-faint)" }}>
+                No outcome snapshots have been saved yet.
+              </p>
+            ) : (
+              <table className="mt-2 w-full min-w-[720px] text-left text-xs">
+                <thead style={{ color: "var(--app-text-faint)" }}>
+                  <tr>
+                    {["Action", "Keyword", "Baseline", "Observed", "Captured"].map((heading) => (
+                      <th key={heading} className="px-2 py-2 font-semibold">{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.savedOutcomeSnapshots.map((snapshot) => (
+                    <tr key={snapshot.id} className="border-t align-top" style={{ borderColor: "var(--app-border)" }}>
+                      <td className="px-2 py-2">
+                        <p className="m-0 font-semibold">{snapshot.actionLabel}</p>
+                        <p className="m-0 mt-1" style={{ color: "var(--app-text-faint)" }}>{snapshot.actionType.replaceAll("_", " ")}</p>
+                      </td>
+                      <td className="px-2 py-2">{snapshot.keyword ?? "Not linked"}</td>
+                      <td className="px-2 py-2">
+                        {snapshot.baselineCapturedAt
+                          ? `${snapshot.baselineRank === null ? "Not in results" : `#${snapshot.baselineRank}`} · ${formatDate(snapshot.baselineCapturedAt)}`
+                          : "No prior rank saved"}
+                      </td>
+                      <td className="px-2 py-2">
+                        {snapshot.measuredRank === null ? "Not in results" : `#${snapshot.measuredRank}`} · {formatDate(snapshot.measuredAt)}
+                      </td>
+                      <td className="px-2 py-2">{formatDate(snapshot.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-xs">
             <thead style={{ color: "var(--app-text-faint)" }}>
@@ -621,8 +898,32 @@ export function SeoReportsView() {
           >
             Export CSV
           </button>
+          <button
+            type="button"
+            disabled={
+              !data ||
+              saveSnapshots.isPending ||
+              (!data.contentRankOutcomes.some((row) => row.measuredAt) &&
+                !data.actionRankOutcomes.some((row) => row.measuredAt))
+            }
+            onClick={() => saveSnapshots.mutate()}
+            className="rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50"
+            style={{ borderColor: "var(--app-border)" }}
+          >
+            {saveSnapshots.isPending ? "Saving…" : "Save measured outcomes"}
+          </button>
         </div>
       </div>
+      {saveSnapshots.isSuccess && (
+        <p className="m-0 text-xs" style={{ color: "var(--app-success-text)" }}>
+          Saved {saveSnapshots.data.createdCount} new outcome snapshot(s); {saveSnapshots.data.duplicateCount} already existed.
+        </p>
+      )}
+      {saveSnapshots.isError && (
+        <p className="m-0 text-xs" style={{ color: "var(--app-danger-strong)" }}>
+          {errorMessage(saveSnapshots.error, "Couldn’t save outcome snapshots.")}
+        </p>
+      )}
       <section
         className="rounded-2xl border"
         style={{

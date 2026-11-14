@@ -365,6 +365,31 @@ export interface FinancialAgentRun {
     approvedReturnReview?: FinancialAgentApprovedReturnReview;
     budgetActualReview?: FinancialAgentBudgetActualReview;
     periodCloseReadiness?: FinancePeriodCloseReadiness;
+    periodClosePriorities?: {
+      source: string;
+      month: string;
+      generatedAt: string;
+      scope: string;
+      coverage: "partial";
+      orderingMethod: string;
+      businesses: Array<{
+        businessId: string;
+        businessName: string;
+        currency: string;
+        reviewOrder: Array<{
+          sequence: number;
+          kind: string;
+          label: string;
+          count: number;
+          evidence: string;
+          explanation: string;
+        }>;
+        notEvaluated: string[];
+        noReviewCuesFromAvailableSources: boolean;
+      }>;
+      unavailable: Array<{ key: string; label: string; status: "not_available" }>;
+      disclosure: string;
+    };
     financeTrialBalance?: FinancialAgentTrialBalance;
     bankStatementReview?: {
       status: "available" | "not_imported";
@@ -417,6 +442,28 @@ export interface FinancialAgentRun {
   aiCallLogs?: SpecialistAgentAiUsageCall[];
 }
 
+export interface FinancialAgentQuestionRun {
+  id: string;
+  status: string;
+  createdAt: string;
+  finishedAt: string | null;
+  output: {
+    answerStatus: "ready" | "unavailable";
+    answer: string | null;
+    message: string | null;
+    readOnly: true;
+    writesPerformed: false;
+    toolRoundLimited?: boolean;
+    toolTrace: {
+      tool: string;
+      outcome: "succeeded" | "refused" | "failed" | "blocked";
+      summary: string;
+      screen: string | null;
+      toolRunId: string | null;
+    }[];
+  };
+}
+
 export interface FinancePeriodCloseBusiness {
   businessId: string;
   businessName: string;
@@ -438,10 +485,11 @@ export interface FinancePeriodCloseBusiness {
   };
   pendingReturns: { count: number; refundAmount: string; source: string };
   xeroSync: {
-    status: "connected" | "not_connected";
+    status: "connected" | "not_connected" | "not_evaluated";
     lastSyncAt: string | null;
     unsyncedOrderCount: number | null;
     source: string | null;
+    unavailableReason?: string | null;
   };
   manualJournals: {
     postedCount: number;
@@ -509,6 +557,25 @@ export function runFinancialAgent(input: {
       headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
       body: JSON.stringify(input),
     }),
+  );
+}
+
+/** POST /profit/agent-questions — answers based only on registered Finance read-only tools. */
+export async function askFinancialAgent(input: { question: string }): Promise<FinancialAgentQuestionRun> {
+  const questionHash = await sha256Hex(input.question);
+  return postSpecialistAgentRun("finance", { kind: "question", questionHash }, (idempotencyKey) =>
+    apiFetch<FinancialAgentQuestionRun>("/profit/agent-questions", {
+      method: "POST",
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  return crypto.subtle.digest("SHA-256", bytes).then((buffer) =>
+    Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join(""),
   );
 }
 

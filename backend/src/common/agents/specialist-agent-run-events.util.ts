@@ -11,6 +11,7 @@ type RunCreatedEventSource = {
   moduleId: string;
   triggerType: string;
   initiatedByUserId: string | null;
+  startedAt?: Date;
   createdAt: Date;
 };
 
@@ -25,6 +26,21 @@ export async function recordSpecialistAgentRunCreatedEvent(
     'agent.run.created',
     run.createdAt,
     { triggerType: run.triggerType },
+  );
+}
+
+/** Persist the point at which a directly executed specialist begins its review. */
+export async function recordSpecialistAgentRunStartedEvent(
+  tx: object,
+  run: RunCreatedEventSource,
+  occurredAt = new Date(),
+) {
+  await recordSpecialistAgentRunEvent(
+    tx,
+    run,
+    'agent.run.started',
+    run.startedAt ?? occurredAt,
+    { status: 'running', triggerType: run.triggerType },
   );
 }
 

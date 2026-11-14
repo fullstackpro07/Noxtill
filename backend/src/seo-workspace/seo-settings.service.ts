@@ -24,7 +24,11 @@ export class SeoSettingsService {
     private readonly config: ConfigService,
   ) {}
 
-  async summary(businessId: string) {
+  async summary(
+    businessId: string,
+    options: { includeIntegrationData?: boolean } = {},
+  ) {
+    const includeIntegrationData = options.includeIntegrationData ?? true;
     const db = this.tenantPrisma.client;
     const [
       business,
@@ -52,15 +56,17 @@ export class SeoSettingsService {
         where: { businessId },
         select: { website: true },
       }),
-      db.integration.findUnique({
-        where: {
-          businessId_provider: {
-            businessId,
-            provider: IntegrationProvider.google_analytics,
-          },
-        },
-        select: { status: true, meta: true },
-      }),
+      includeIntegrationData
+        ? db.integration.findUnique({
+            where: {
+              businessId_provider: {
+                businessId,
+                provider: IntegrationProvider.google_analytics,
+              },
+            },
+            select: { status: true, meta: true },
+          })
+        : Promise.resolve(null),
     ]);
     const policies = resolvePolicies(business);
     const aiDrafts = policies.bool('seo.aiDraftsEnabled');
@@ -102,8 +108,9 @@ export class SeoSettingsService {
       'returned',
       'no_data_returned',
     ].includes(String(analyticsLandingPagesRecord.dataState));
-    const analyticsUnavailableReason =
-      analyticsIntegration?.status !== IntegrationStatus.connected
+    const analyticsUnavailableReason = !includeIntegrationData
+      ? 'Google Analytics connection and saved provider data were not evaluated because Integrations is disabled.'
+      : analyticsIntegration?.status !== IntegrationStatus.connected
         ? 'Connect Google Analytics 4 in Integrations to sync Organic Search totals and page-path metrics.'
         : !analyticsSelected
           ? 'Select a Google Analytics 4 property in SEO Settings to sync Organic Search totals and page-path metrics.'

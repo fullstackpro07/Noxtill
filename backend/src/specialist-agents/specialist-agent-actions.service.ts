@@ -2,8 +2,15 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
+import {
+  isSpecialistSourceModuleDisabledError,
+  SpecialistAgentPolicyService,
+} from '../common/agents/specialist-agent-policy.service';
 import type { SpecialistAgentPersistedKey } from '../common/agents/specialist-agent-registry';
+import {
+  legacySpecialistAgentSourceModules,
+  specialistAgentRunDetailsHiddenByModuleSelection,
+} from '../common/agents/specialist-agent-module-selection.util';
 import { CustomerSegmentDraftsService } from '../customers/customer-segment-drafts.service';
 import { CustomerAgentActionsService } from '../customers/customer-agent-actions.service';
 import { ProcurementService } from '../procurement/procurement.service';
@@ -12,6 +19,7 @@ import { transitionSpecialistAgentAction } from '../common/agents/specialist-age
 import type { SpecialistAgentActionState } from '../common/agents/specialist-agent-action.util';
 import { DecideSpecialistAgentActionDto } from './dto/decide-specialist-agent-action.dto';
 import { ListSpecialistAgentActionsDto } from './dto/list-specialist-agent-actions.dto';
+import { SpecialistAgentActionExpiryService } from './specialist-agent-action-expiry.service';
 
 const SPECIALIST_ACTION_SAFE_SELECT = {
   id: true,
@@ -34,10 +42,33 @@ const SPECIALIST_ACTION_SAFE_SELECT = {
   createdAt: true,
   updatedAt: true,
   approvedAt: true,
+  approvalExpiresAt: true,
   executedAt: true,
   verifiedAt: true,
   closedAt: true,
 } satisfies Prisma.SpecialistAgentActionSelect;
+
+function actionAuthorizationDenialCode(error: unknown): string | null {
+  if (isSpecialistSourceModuleDisabledError(error)) {
+    return 'BUSINESS_MODULE_DISABLED';
+  }
+  if (!(error instanceof AppException)) return null;
+  const response = error.getResponse();
+  if (
+    typeof response !== 'object' ||
+    response === null ||
+    !('code' in response) ||
+    typeof response.code !== 'string'
+  ) {
+    return null;
+  }
+  return [
+    'SPECIALIST_ACTION_SOURCE_MODULE_DISABLED',
+    'SPECIALIST_AGENT_DISABLED',
+  ].includes(response.code)
+    ? response.code
+    : null;
+}
 
 @Injectable()
 export class SpecialistAgentActionsService {
@@ -48,14 +79,74 @@ export class SpecialistAgentActionsService {
     private readonly customerSegments: CustomerSegmentDraftsService,
     private readonly customerActions: CustomerAgentActionsService,
     private readonly agentPolicy: SpecialistAgentPolicyService,
+    private readonly actionExpiry: SpecialistAgentActionExpiryService,
   ) {}
 
-  private async actionForDecision(businessId: string, actionId: string) {
+  private actionDetailsHidden(
+    agentKey: string,
+    output: Prisma.JsonValue,
+    disabledModules: ReadonlySet<string>,
+  ) {
+    const legacySources = legacySpecialistAgentSourceModules(agentKey);
+    return (
+      !legacySources ||
+      specialistAgentRunDetailsHiddenByModuleSelection(
+        output,
+        disabledModules,
+        legacySources,
+      )
+    );
+  }
+
+  private async auditCrossTenantActionProbe(
+    businessId: string,
+    actionId: string,
+    actorUserId: string,
+    operation:
+      | 'get'
+      | 'approve'
+      | 'reject'
+      | 'execute'
+      | 'source_rfq'
+      | 'cancel'
+      | 'resolve',
+  ) {
+    const foreignAction =
+      await this.tenantPrisma.unscoped.specialistAgentAction.findFirst({
+        where: { id: actionId, businessId: { not: businessId } },
+        select: { id: true },
+      });
+    if (!foreignAction) return;
+    await this.tenantPrisma.client.auditLog.create({
+      data: {
+        businessId,
+        actorUserId,
+        action: 'specialist_agent.action_cross_tenant_access_denied',
+        entity: 'SpecialistAgentAction',
+        entityId: actionId,
+        after: { operation, denied: true },
+      },
+    });
+  }
+
+  private async actionForDecision(
+    businessId: string,
+    actionId: string,
+    actorUserId: string,
+    operation:
+      | 'approve'
+      | 'reject'
+      | 'execute'
+      | 'source_rfq'
+      | 'cancel'
+      | 'resolve',
+  ) {
     const action =
       await this.tenantPrisma.client.specialistAgentAction.findFirst({
         where: { businessId, id: actionId },
         select: {
           id: true,
+          runId: true,
           agentKey: true,
           actionType: true,
           expectedVersion: true,
@@ -63,16 +154,109 @@ export class SpecialistAgentActionsService {
           canonicalResourceId: true,
           canonicalOperationId: true,
           state: true,
+          approvalExpiresAt: true,
+          errorCode: true,
+          businessId: true,
         },
       });
     if (!action) {
+      await this.auditCrossTenantActionProbe(
+        businessId,
+        actionId,
+        actorUserId,
+        operation,
+      );
       throw new AppException(
         'SPECIALIST_ACTION_NOT_FOUND',
         'The specialist action is not available in this business.',
         HttpStatus.NOT_FOUND,
       );
     }
+    await this.actionExpiry.assertActionApprovalNotExpired(action);
     return action;
+  }
+
+  private async assertActionSourceModulesEnabled(
+    businessId: string,
+    action: { runId: string; agentKey: string },
+  ) {
+    const legacySources = legacySpecialistAgentSourceModules(action.agentKey);
+    if (!legacySources) {
+      throw new AppException(
+        'SPECIALIST_ACTION_SOURCE_CONTEXT_UNAVAILABLE',
+        'This action does not have a registered source-module policy and cannot be approved or executed.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const run = await this.tenantPrisma.client.specialistAgentRun.findFirst({
+      where: {
+        id: action.runId,
+        businessId,
+        agentKey: action.agentKey,
+      },
+      select: { output: true },
+    });
+    if (!run) {
+      throw new AppException(
+        'SPECIALIST_ACTION_SOURCE_CONTEXT_UNAVAILABLE',
+        'The review behind this action is no longer available, so the action cannot be approved or executed.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const disabledModules = new Set(
+      await this.agentPolicy.disabledModulesForBusiness(businessId),
+    );
+    if (
+      specialistAgentRunDetailsHiddenByModuleSelection(
+        run.output,
+        disabledModules,
+        legacySources,
+      )
+    ) {
+      throw new AppException(
+        'SPECIALIST_ACTION_SOURCE_MODULE_DISABLED',
+        'A source module used by this action is disabled. Enable the required module and review a fresh agent run before approving or executing it.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private async assertActionModulesEnabled(
+    businessId: string,
+    actorUserId: string,
+    action: {
+      id: string;
+      runId: string;
+      agentKey: string;
+      actionType: string;
+    },
+  ) {
+    try {
+      await this.agentPolicy.assertAgentEnabled(
+        businessId,
+        action.agentKey as SpecialistAgentPersistedKey,
+      );
+      await this.assertActionSourceModulesEnabled(businessId, action);
+    } catch (error) {
+      const denialCode = actionAuthorizationDenialCode(error);
+      if (!denialCode) throw error;
+      await this.tenantPrisma.client.auditLog.create({
+        data: {
+          businessId,
+          actorUserId,
+          action: 'specialist_agent.action.authorization_denied',
+          entity: 'SpecialistAgentAction',
+          entityId: action.id,
+          after: {
+            agentKey: action.agentKey,
+            actionType: action.actionType,
+            denied: true,
+            reasonCode: denialCode,
+          },
+        },
+      });
+      throw error;
+    }
   }
 
   private requireActionState(action: { state: string }, state: string) {
@@ -155,7 +339,7 @@ export class SpecialistAgentActionsService {
         update: input.update,
       });
     });
-    return this.get(input.businessId, input.actionId);
+    return this.get(input.businessId, input.actionId, input.actorUserId);
   }
 
   private async executeCustomerFollowUpAction(input: {
@@ -315,18 +499,21 @@ export class SpecialistAgentActionsService {
     actionId: string,
     input: DecideSpecialistAgentActionDto,
   ) {
-    const action = await this.actionForDecision(businessId, actionId);
-    this.requireActionState(action, 'approval_required');
-    await this.agentPolicy.assertAgentEnabled(
+    const action = await this.actionForDecision(
       businessId,
-      action.agentKey as SpecialistAgentPersistedKey,
+      actionId,
+      actorUserId,
+      'approve',
     );
+    this.requireActionState(action, 'approval_required');
+    await this.assertActionModulesEnabled(businessId, actorUserId, action);
 
     if (
       action.actionType === 'inventory_reorder_request' &&
       action.canonicalResourceType === 'ProcurementRequest'
     ) {
       this.requireInventoryActionVersion(action, input.expectedVersion);
+      await this.assertActionModulesEnabled(businessId, actorUserId, action);
       return this.procurement.decideRequest(
         businessId,
         actorUserId,
@@ -337,6 +524,7 @@ export class SpecialistAgentActionsService {
 
     if (this.isCustomerFollowUpAction(action)) {
       this.requireCustomerFollowUpActionVersion(action, input.expectedVersion);
+      await this.assertActionModulesEnabled(businessId, actorUserId, action);
       return this.decideCustomerFollowUpAction({
         businessId,
         actorUserId,
@@ -367,6 +555,7 @@ export class SpecialistAgentActionsService {
           HttpStatus.BAD_REQUEST,
         );
       }
+      await this.assertActionModulesEnabled(businessId, actorUserId, action);
       return this.customerSegments.approve(
         actorUserId,
         action.canonicalResourceId,
@@ -387,7 +576,12 @@ export class SpecialistAgentActionsService {
     actionId: string,
     input: DecideSpecialistAgentActionDto,
   ) {
-    const action = await this.actionForDecision(businessId, actionId);
+    const action = await this.actionForDecision(
+      businessId,
+      actionId,
+      actorUserId,
+      'reject',
+    );
     this.requireActionState(action, 'approval_required');
     const reason = input.reason?.trim();
     if (!reason) {
@@ -457,15 +651,18 @@ export class SpecialistAgentActionsService {
     actionId: string,
     input: DecideSpecialistAgentActionDto,
   ) {
-    const action = await this.actionForDecision(businessId, actionId);
-    await this.agentPolicy.assertAgentEnabled(
+    const action = await this.actionForDecision(
       businessId,
-      action.agentKey as SpecialistAgentPersistedKey,
+      actionId,
+      actorUserId,
+      'execute',
     );
+    await this.assertActionModulesEnabled(businessId, actorUserId, action);
     if (this.isCustomerFollowUpAction(action)) {
       this.requireCustomerFollowUpActionVersion(action, input.expectedVersion);
       const fromState = action.state === 'failed' ? 'failed' : 'approved';
       this.requireActionState(action, fromState);
+      await this.assertActionModulesEnabled(businessId, actorUserId, action);
       return this.executeCustomerFollowUpAction({
         businessId,
         actorUserId,
@@ -481,6 +678,7 @@ export class SpecialistAgentActionsService {
       action.canonicalResourceType === 'ProcurementRequest'
     ) {
       this.requireInventoryActionVersion(action, input.expectedVersion);
+      await this.assertActionModulesEnabled(businessId, actorUserId, action);
       return this.procurement.convertRequestToPurchaseOrder(
         businessId,
         actorUserId,
@@ -498,7 +696,12 @@ export class SpecialistAgentActionsService {
     actionId: string,
     input: DecideSpecialistAgentActionDto,
   ) {
-    const action = await this.actionForDecision(businessId, actionId);
+    const action = await this.actionForDecision(
+      businessId,
+      actionId,
+      actorUserId,
+      'source_rfq',
+    );
     if (
       action.agentKey !== 'inventory_intelligence' ||
       action.actionType !== 'inventory_reorder_request' ||
@@ -507,7 +710,7 @@ export class SpecialistAgentActionsService {
       throw this.unsupportedAction(action.actionType);
     }
     this.requireInventoryActionVersion(action, input.expectedVersion);
-    await this.agentPolicy.assertAgentEnabled(businessId, action.agentKey);
+    await this.assertActionModulesEnabled(businessId, actorUserId, action);
 
     if (action.state === 'verified') {
       if (!action.canonicalOperationId) {
@@ -621,6 +824,9 @@ export class SpecialistAgentActionsService {
         rfq = alreadyCreated;
       } else {
         try {
+          // The source may have been disabled after the action was queued. Check
+          // again at the boundary immediately before the canonical RFQ write.
+          await this.assertActionModulesEnabled(businessId, actorUserId, action);
           const created = await this.commerceRfqs.createFromProcurementRequest(
             businessId,
             actorUserId,
@@ -803,7 +1009,12 @@ export class SpecialistAgentActionsService {
     actionId: string,
     input: DecideSpecialistAgentActionDto,
   ) {
-    const action = await this.actionForDecision(businessId, actionId);
+    const action = await this.actionForDecision(
+      businessId,
+      actionId,
+      actorUserId,
+      'cancel',
+    );
     const reason = input.reason?.trim();
     if (!reason) {
       throw new AppException(
@@ -894,6 +1105,83 @@ export class SpecialistAgentActionsService {
     throw this.unsupportedAction(action.actionType);
   }
 
+  async resolveUnknownOutcome(
+    businessId: string,
+    actorUserId: string,
+    actionId: string,
+    input: DecideSpecialistAgentActionDto,
+  ) {
+    const action = await this.actionForDecision(
+      businessId,
+      actionId,
+      actorUserId,
+      'resolve',
+    );
+    this.requireActionState(action, 'needs_review');
+    const verificationOutcomeUnknown =
+      action.errorCode ===
+      'SPECIALIST_ACTION_VERIFICATION_OUTCOME_UNKNOWN';
+    const executionOutcomeUnknown =
+      action.errorCode === 'SPECIALIST_ACTION_OUTCOME_UNKNOWN';
+    if (!verificationOutcomeUnknown && !executionOutcomeUnknown) {
+      throw new AppException(
+        'SPECIALIST_ACTION_RESOLUTION_UNAVAILABLE',
+        'This action is not waiting for an unknown execution or verification outcome review.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const reason = input.reason?.trim();
+    if (!reason) {
+      throw new AppException(
+        'SPECIALIST_ACTION_DECISION_REASON_REQUIRED',
+        'Record what you found when checking the canonical resource before closing this review. Closing does not mark the action successful or verified.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.tenantPrisma.client.$transaction(async (tx) => {
+      await transitionSpecialistAgentAction(tx, {
+        businessId,
+        actionId,
+        fromState: 'needs_review',
+        toState: 'closed',
+        actorUserId,
+        eventType: verificationOutcomeUnknown
+          ? 'verification_outcome_reconciled_closed'
+          : 'execution_outcome_reconciled_closed',
+        reason,
+        metadata: {
+          outcome: verificationOutcomeUnknown
+            ? 'verification_unknown_closed_by_owner'
+            : 'execution_unknown_closed_by_owner',
+          providerConfirmed: false,
+          verificationConfirmed: false,
+        },
+        update: { closedAt: new Date() },
+      });
+      await tx.auditLog.create({
+        data: {
+          businessId,
+          actorUserId,
+          action: verificationOutcomeUnknown
+            ? 'specialist_agent.action.verification_outcome_reconciled'
+            : 'specialist_agent.action.execution_outcome_reconciled',
+          entity: 'specialist_agent_action',
+          entityId: actionId,
+          after: {
+            state: 'closed',
+            outcome: verificationOutcomeUnknown
+              ? 'verification_unknown_closed_by_owner'
+              : 'execution_unknown_closed_by_owner',
+            providerConfirmed: false,
+            verificationConfirmed: false,
+          },
+        },
+      });
+    });
+    return this.get(businessId, actionId, actorUserId);
+  }
+
   private customerSegmentVersion(action: {
     agentKey: string;
     actionType: string;
@@ -920,12 +1208,14 @@ export class SpecialistAgentActionsService {
     );
   }
 
-  async get(businessId: string, actionId: string) {
+  async get(businessId: string, actionId: string, actorUserId: string) {
+    await this.actionExpiry.expireBusinessApprovals(businessId);
     const action =
       await this.tenantPrisma.client.specialistAgentAction.findFirst({
         where: { businessId, id: actionId },
         select: {
           ...SPECIALIST_ACTION_SAFE_SELECT,
+          run: { select: { output: true } },
           events: {
             orderBy: [{ sequence: 'asc' }, { id: 'asc' }],
             select: {
@@ -941,20 +1231,52 @@ export class SpecialistAgentActionsService {
         },
       });
     if (!action) {
+      await this.auditCrossTenantActionProbe(
+        businessId,
+        actionId,
+        actorUserId,
+        'get',
+      );
       throw new AppException(
         'SPECIALIST_ACTION_NOT_FOUND',
         'The specialist action is not available in this business.',
         HttpStatus.NOT_FOUND,
       );
     }
-    const { events, ...safeAction } = action;
+    const disabledModules = new Set(
+      await this.agentPolicy.disabledModulesForBusiness(businessId),
+    );
+    const detailsRedacted = this.actionDetailsHidden(
+      action.agentKey,
+      action.run.output,
+      disabledModules,
+    );
+    const events = action.events;
+    const safeAction = Object.fromEntries(
+      Object.entries(action).filter(
+        ([key]) => key !== 'run' && key !== 'events',
+      ),
+    ) as Omit<typeof action, 'run' | 'events'>;
+    if (detailsRedacted) {
+      return {
+        ...safeAction,
+        canonicalResourceId: null,
+        canonicalOperationId: null,
+        eventHistory: [],
+        detailsRedacted: true,
+        detailsRedactionMessage:
+          'Enable the source module and review a fresh agent run to access action details.',
+      };
+    }
     return {
       ...safeAction,
       eventHistory: events,
+      detailsRedacted: false,
     };
   }
 
   async list(businessId: string, query: ListSpecialistAgentActionsDto) {
+    await this.actionExpiry.expireBusinessApprovals(businessId);
     const limit = query.limit ?? 25;
     const where: Prisma.SpecialistAgentActionWhereInput = {
       businessId,
@@ -984,13 +1306,36 @@ export class SpecialistAgentActionsService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      select: SPECIALIST_ACTION_SAFE_SELECT,
+      select: {
+        ...SPECIALIST_ACTION_SAFE_SELECT,
+        run: { select: { output: true } },
+      },
     });
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
+    const disabledModules = new Set(
+      await this.agentPolicy.disabledModulesForBusiness(businessId),
+    );
+    const safeItems = items.map(({ run, ...action }) => {
+      const detailsRedacted = this.actionDetailsHidden(
+        action.agentKey,
+        run.output,
+        disabledModules,
+      );
+      return detailsRedacted
+        ? {
+            ...action,
+            canonicalResourceId: null,
+            canonicalOperationId: null,
+            detailsRedacted: true,
+            detailsRedactionMessage:
+              'Enable the source module and review a fresh agent run to access action details.',
+          }
+        : { ...action, detailsRedacted: false };
+    });
 
     return {
-      items,
+      items: safeItems,
       nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
       pageSize: limit,
     };

@@ -7,7 +7,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { AnalyticsService } from './analytics.service';
 import { MessageAtRiskDto } from './dto/message-at-risk.dto';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
@@ -21,6 +21,12 @@ class CustomerAgentQuestionDto {
   @MinLength(4)
   @MaxLength(1_000)
   question!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(191)
+  customerId?: string;
 }
 
 /** UPD-BE-108 fix-it: no capability gate previously existed on real KPI/cohort/staff-sales data. */
@@ -91,8 +97,8 @@ export class AnalyticsController {
   }
 
   @Get('customers/agent-runs')
-  listCustomerAgentRuns() {
-    return this.customerIntelligence.listRuns();
+  listCustomerAgentRuns(@CurrentUser() user: AuthenticatedUser) {
+    return this.customerIntelligence.listRuns(user.businessId);
   }
 
   @RequireCapability(CAPABILITIES.CUSTOMER_AGENT_RUN)
@@ -125,6 +131,7 @@ export class AnalyticsController {
       user.sub,
       dto.question,
       idempotencyKey,
+      dto.customerId,
     );
   }
 

@@ -983,6 +983,32 @@ describe('AiSettingsService (UPD-BE-115)', () => {
           {
             businessId,
             actorUserId: 'qa-operations-owner',
+            action: 'specialist_agent.orchestration.queue_authorization_denied',
+            entity: 'SpecialistAgentRun',
+            entityId: 'qa-stopped-revoked-orchestration',
+            after: {
+              denied: true,
+              mode: 'run',
+              reasonCode: 'SPECIALIST_ORCHESTRATION_ACTOR_PERMISSION_REVOKED',
+            },
+            createdAt: now,
+          },
+          {
+            businessId,
+            actorUserId: 'qa-operations-owner',
+            action: 'specialist_agent.tool.actor_authorization_denied',
+            entity: 'SpecialistAgentRun',
+            entityId: 'qa-stopped-revoked-tool',
+            after: {
+              agentKey: 'customer_intelligence',
+              denied: true,
+              reasonCode: 'SPECIALIST_AGENT_ACTOR_PERMISSION_REVOKED',
+            },
+            createdAt: now,
+          },
+          {
+            businessId,
+            actorUserId: 'qa-operations-owner',
             action: 'commerce.agent_tool_call_blocked',
             entity: 'SpecialistAgentRun',
             entityId: 'qa-blocked-commerce-tool-call',
@@ -1129,18 +1155,34 @@ describe('AiSettingsService (UPD-BE-115)', () => {
       expect(oldestWaitingAgeMs).toBeLessThan(40_000);
       expect(operations.securityEvents).toEqual({
         auditedCrossTenantRunProbeDenials: 1,
+        auditedOrchestrationAuthorizationDenials: 1,
+        auditedAgentToolAuthorizationDenials: 1,
+        auditedActionCrossTenantProbeDenials: 0,
+        auditedActionPolicyDenials: 0,
         auditedCommerceToolCallBlocks: 1,
         persistedToolCallRefusals: 3,
         auditedCommerceApprovalRefusals: 1,
         auditedCustomerMessageQueueRefusals: 1,
       });
-      expect(operations.securityDenials).toHaveLength(7);
+      expect(operations.securityDenials).toHaveLength(9);
       expect(operations.securityDenials).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             source: 'audit_log',
             event: 'specialist_agent.orchestration_cross_tenant_access_denied',
             targetId: 'qa-audited-cross-tenant-probe',
+            actorUserId: 'qa-operations-owner',
+          }),
+          expect.objectContaining({
+            source: 'audit_log',
+            event: 'specialist_agent.orchestration.queue_authorization_denied',
+            targetId: 'qa-stopped-revoked-orchestration',
+            actorUserId: 'qa-operations-owner',
+          }),
+          expect.objectContaining({
+            source: 'audit_log',
+            event: 'specialist_agent.tool.actor_authorization_denied',
+            targetId: 'qa-stopped-revoked-tool',
             actorUserId: 'qa-operations-owner',
           }),
           expect.objectContaining({
@@ -1178,6 +1220,12 @@ describe('AiSettingsService (UPD-BE-115)', () => {
             code: 'cross_tenant_probe_denied',
             agentKey: 'security',
             severity: 'critical',
+            observedValue: 1,
+          }),
+          expect.objectContaining({
+            code: 'specialist_tool_actor_authorization_denied',
+            agentKey: 'security',
+            severity: 'warning',
             observedValue: 1,
           }),
           expect.objectContaining({
@@ -1487,7 +1535,7 @@ describe('AiSettingsService (UPD-BE-115)', () => {
         "Per-agent queued-run count and oldest age come from this business's persisted SpecialistAgentRun rows with status queued. They are not live Redis/BullMQ depth, worker-liveness checks, or proof that a job is still present in Redis.",
       );
       expect(operations.disclosures).toContain(
-        'Security counters include only audited denied cross-tenant run probes, Commerce unregistered/over-limit tool attempts, Commerce approval refusals after policy recheck, and Customer Agent message-queue refusals. They are not comprehensive security-event monitoring; other permission, stale-data, prompt-injection and policy blocks are not counted here.',
+        'Security counters include audited denied cross-tenant run and action probes, specialist action denials caused by a disabled agent or source module, Commerce unregistered/over-limit tool attempts, Commerce approval refusals after policy recheck, and Customer Agent message-queue refusals. They are not comprehensive security-event monitoring; other permission, stale-data, prompt-injection and policy blocks are not counted here.',
       );
       expect(operations.disclosures).toContain(
         'Operational alerts are deterministic signals over saved specialist runs, AI call logs, action verification events, open material actions, sampled evidence freshness and configured monthly AI request/spend limits. A queued-run age warning is optional and uses the current business policy against saved run timestamps; it does not inspect live Redis/BullMQ. Budget bands are 70% and 90%; spend is an application estimate, not an invoice. This does not detect unusual cost spikes, external provider outages, or conditions outside the sampled 30-day evidence window.',

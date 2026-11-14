@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
@@ -9,6 +9,10 @@ import { SeoSpecialistAgentService } from './seo-specialist-agent.service';
 
 class GenerateOpportunityBriefDto {
   @IsOptional() @IsString() @MaxLength(2000) strategyNote?: string;
+}
+
+class RunSeoAgentDto {
+  @IsOptional() @IsString() @MinLength(4) @MaxLength(1000) question?: string;
 }
 
 /** Workspace decisions use owning services; agent drafts enter the canonical Content workflow. */
@@ -30,8 +34,8 @@ export class SeoAgentWorkspaceController {
   }
 
   @Get('agent-runs')
-  agentRuns() {
-    return this.agent.listRuns();
+  agentRuns(@CurrentUser() user: AuthenticatedUser) {
+    return this.agent.listRuns(user.businessId);
   }
 
   @RequireCapability(CAPABILITIES.SEO_AGENT_RUN)
@@ -39,8 +43,15 @@ export class SeoAgentWorkspaceController {
   runAgent(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('Idempotency-Key') idempotencyKey?: string,
+    @Body() dto?: RunSeoAgentDto,
   ) {
-    return this.agent.run(user.businessId, user.sub, idempotencyKey);
+    return this.agent.run(
+      user.businessId,
+      user.sub,
+      idempotencyKey,
+      {},
+      dto?.question,
+    );
   }
 
   @RequireCapability(CAPABILITIES.SEO_MANAGE)

@@ -39,7 +39,11 @@ export class BusinessModulesController {
       );
     }
     return {
-      disabled: await this.modules.setSelection(user.businessId, dto.enabled),
+      disabled: await this.modules.setSelection(
+        user.businessId,
+        dto.enabled,
+        user.sub,
+      ),
     };
   }
 }

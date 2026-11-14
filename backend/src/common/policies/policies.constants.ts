@@ -104,6 +104,31 @@ export const POLICY_DEFS = {
     max: 100,
     integer: true,
   },
+  'agents.specialistActionApprovalTtlDays': {
+    kind: 'number',
+    default: 7,
+    min: 1,
+    max: 90,
+    integer: true,
+  },
+  // specialist-agents/specialist-agent-action-expiry.service.ts: unresolved provider actions are
+  // moved to human review after this interval; they are never retried automatically.
+  'agents.specialistActionStaleExecutionMinutes': {
+    kind: 'number',
+    default: 60,
+    min: 15,
+    max: 1440,
+    integer: true,
+  },
+  // specialist-agents/specialist-agent-action-expiry.service.ts: stale verification is sent to
+  // human review without being marked successful or retried.
+  'agents.specialistActionStaleVerificationMinutes': {
+    kind: 'number',
+    default: 60,
+    min: 15,
+    max: 1440,
+    integer: true,
+  },
   // ai/ai-settings.service.ts (owner-configured advisory for saved queued runs)
   'agents.queuedRunWarningAgeMinutes': {
     kind: 'nullableNumber',
@@ -152,6 +177,11 @@ export const POLICY_DEFS = {
     kind: 'boolean',
     default: false,
   },
+  // A direct inventory purchase movement may queue a read-only review when opted in.
+  'agents.inventoryPurchaseMovementEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
   // New lapsed-customer transitions may trigger one daily aggregate Customer review when opted in.
   'agents.customerLapsedEventReviewEnabled': {
     kind: 'boolean',
@@ -172,8 +202,38 @@ export const POLICY_DEFS = {
     kind: 'boolean',
     default: false,
   },
+  // A newly completed appointment may queue an aggregate read-only Customer review when opted in.
+  'agents.customerAppointmentCompletedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A customer appointment time or assigned staff change may queue a daily aggregate review.
+  'agents.customerAppointmentRescheduledEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
   // A completed POS sale may queue one daily aggregate Customer review when explicitly enabled.
   'agents.customerCompletedSaleEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A cancelled customer-linked order may queue one daily aggregate read-only Customer review.
+  'agents.customerCancelledOrderEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A submitted Noxtill review may queue a read-only aggregate Customer review when opted in.
+  'agents.customerReviewReceivedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A provider-confirmed customer message may queue one read-only aggregate Customer review.
+  'agents.customerMessageDeliveryConfirmedEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // An approved Noxtill return may queue a read-only Customer review when opted in.
+  'agents.customerReturnApprovedEventReviewEnabled': {
     kind: 'boolean',
     default: false,
   },
@@ -207,6 +267,11 @@ export const POLICY_DEFS = {
   },
   // A completed provider reconciliation may queue a read-only Commerce review.
   'agents.commerceReconciliationEventReviewEnabled': {
+    kind: 'boolean',
+    default: false,
+  },
+  // A completed canonical production work order may queue a read-only Commerce review.
+  'agents.commerceProductionEventReviewEnabled': {
     kind: 'boolean',
     default: false,
   },

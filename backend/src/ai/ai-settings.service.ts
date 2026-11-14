@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { BusinessModulesService } from '../business-modules/business-modules.service';
 import { UpdateAiSettingsDto } from './dto/update-ai-settings.dto';
 import {
   AI_FEATURE_KEYS,
@@ -12,6 +13,10 @@ import { SPECIALIST_AGENT_BUDGETS } from './specialist-agent-budgets.constants';
 import { resolvePolicies } from '../common/policies/policies.service';
 import { SPECIALIST_AGENT_ORCHESTRATOR } from '../common/agents/specialist-agent-registry';
 import { recordSpecialistAgentConfigVersions } from '../common/agents/specialist-agent-config.util';
+import {
+  legacySpecialistAgentSourceModules,
+  specialistAgentRunDetailsHiddenByModuleSelection,
+} from '../common/agents/specialist-agent-module-selection.util';
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -101,6 +106,7 @@ type SpecialistAgentOperationAccumulator = {
   verificationOutcomes: {
     verified: number;
     failed: number;
+    unknown: number;
     verificationEvents: number;
     failedSharePercent: number | null;
   };
@@ -146,7 +152,14 @@ function resolveToggles(raw: unknown): FeatureToggles {
  */
 @Injectable()
 export class AiSettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly businessModules: BusinessModulesService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() businessModules?: BusinessModulesService,
+  ) {
+    this.businessModules = businessModules ?? new BusinessModulesService(prisma);
+  }
 
   /**
    * Tenant-scoped, read-only operating summary from persisted specialist runs and linked AI logs.
@@ -170,6 +183,7 @@ export class AiSettingsService {
       recommendationGroups,
       actionGroups,
       openActionGroups,
+      openVerificationUnknownGroups,
       actionTypeGroups,
       actionLifecycleGroups,
       actionRevisionGroups,
@@ -194,6 +208,10 @@ export class AiSettingsService {
       monthlyRequestGroups,
       monthlyTokenGroups,
       auditedCrossTenantRunProbeDenials,
+      auditedOrchestrationAuthorizationDenials,
+      auditedAgentToolAuthorizationDenials,
+      auditedActionCrossTenantProbeDenials,
+      auditedActionPolicyDenials,
       auditedCommerceToolCallBlocks,
       auditedCommerceApprovalRefusals,
       auditedCustomerMessageQueueRefusals,
@@ -243,6 +261,15 @@ export class AiSettingsService {
         },
         _count: { _all: true },
         _min: { updatedAt: true },
+      }),
+      this.prisma.specialistAgentAction.groupBy({
+        by: ['agentKey'],
+        where: {
+          businessId,
+          state: 'needs_review',
+          errorCode: 'SPECIALIST_ACTION_VERIFICATION_OUTCOME_UNKNOWN',
+        },
+        _count: { _all: true },
       }),
       this.prisma.specialistAgentAction.groupBy({
         by: ['agentKey', 'actionType', 'state'],
@@ -521,6 +548,43 @@ export class AiSettingsService {
         where: {
           businessId,
           entity: 'SpecialistAgentRun',
+          action: 'specialist_agent.orchestration.queue_authorization_denied',
+          createdAt: { gte: windowStart, lte: observedAt },
+        },
+      }),
+      this.prisma.auditLog.count({
+        where: {
+          businessId,
+          entity: 'SpecialistAgentRun',
+          action: 'specialist_agent.tool.actor_authorization_denied',
+          createdAt: { gte: windowStart, lte: observedAt },
+        },
+      }),
+      this.prisma.auditLog.count({
+        where: {
+          businessId,
+          entity: 'SpecialistAgentAction',
+          action: 'specialist_agent.action_cross_tenant_access_denied',
+          createdAt: { gte: windowStart, lte: observedAt },
+        },
+      }),
+      this.prisma.auditLog.count({
+        where: {
+          businessId,
+          entity: 'SpecialistAgentAction',
+          action: {
+            in: [
+              'specialist_agent.action.authorization_denied',
+              'specialist_agent.action.source_module_denied',
+            ],
+          },
+          createdAt: { gte: windowStart, lte: observedAt },
+        },
+      }),
+      this.prisma.auditLog.count({
+        where: {
+          businessId,
+          entity: 'SpecialistAgentRun',
           action: 'commerce.agent_tool_call_blocked',
           createdAt: { gte: windowStart, lte: observedAt },
         },
@@ -548,6 +612,11 @@ export class AiSettingsService {
           action: {
             in: [
               'specialist_agent.orchestration_cross_tenant_access_denied',
+              'specialist_agent.orchestration.queue_authorization_denied',
+              'specialist_agent.tool.actor_authorization_denied',
+              'specialist_agent.action_cross_tenant_access_denied',
+              'specialist_agent.action.authorization_denied',
+              'specialist_agent.action.source_module_denied',
               'commerce.agent_tool_call_blocked',
               'commerce.agent_tool_approval_refused',
               'customer_agent.message_draft_queue_refused',
@@ -794,6 +863,7 @@ export class AiSettingsService {
             verificationOutcomes: {
               verified: 0,
               failed: 0,
+              unknown: 0,
               verificationEvents: 0,
               failedSharePercent: null,
             },
@@ -904,6 +974,11 @@ export class AiSettingsService {
       } else if (row.toState === 'verification_failed') {
         stats.verificationOutcomes.failed += row._count._all;
       }
+    }
+
+    for (const row of openVerificationUnknownGroups) {
+      const stats = agentStats.get(row.agentKey as SpecialistAgentKey);
+      if (stats) stats.verificationOutcomes.unknown += row._count._all;
     }
 
     for (const row of actionRevisionGroups) {
@@ -1425,6 +1500,14 @@ export class AiSettingsService {
         agent.verificationOutcomes.failed,
         'events',
       );
+      addCountAlert(
+        agent,
+        'unknown_verification_outcomes',
+        'Unknown verification outcomes requiring review',
+        agent.verificationOutcomes.unknown,
+        'records',
+        false,
+      );
       const staleEvidenceCount =
         (agent.evidence.freshnessCounts.stale ?? 0) +
         (agent.evidence.freshnessCounts.missing ?? 0);
@@ -1495,6 +1578,58 @@ export class AiSettingsService {
       });
     }
 
+    if (auditedOrchestrationAuthorizationDenials > 0) {
+      alerts.push({
+        code: 'orchestration_queue_authorization_denied',
+        agentKey: 'security',
+        agentName: 'Cross-agent security',
+        severity: 'warning',
+        observedValue: auditedOrchestrationAuthorizationDenials,
+        thresholdValue: 0,
+        unit: 'events',
+        message: `${auditedOrchestrationAuthorizationDenials} queued cross-agent review(s) were stopped because the business was inactive or the initiating owner's access had changed. Review the security audit log.`,
+      });
+    }
+
+    if (auditedAgentToolAuthorizationDenials > 0) {
+      alerts.push({
+        code: 'specialist_tool_actor_authorization_denied',
+        agentKey: 'security',
+        agentName: 'Cross-agent security',
+        severity: 'warning',
+        observedValue: auditedAgentToolAuthorizationDenials,
+        thresholdValue: 0,
+        unit: 'events',
+        message: `${auditedAgentToolAuthorizationDenials} queued specialist tool call(s) were stopped after the initiating user's membership or agent permission changed. Review the security audit log.`,
+      });
+    }
+
+    if (auditedActionCrossTenantProbeDenials > 0) {
+      alerts.push({
+        code: 'specialist_action_cross_tenant_probe_denied',
+        agentKey: 'security',
+        agentName: 'Cross-agent security',
+        severity: 'critical',
+        observedValue: auditedActionCrossTenantProbeDenials,
+        thresholdValue: 0,
+        unit: 'events',
+        message: `${auditedActionCrossTenantProbeDenials} denied cross-business specialist action probe(s) were recorded. Review the security audit log.`,
+      });
+    }
+
+    if (auditedActionPolicyDenials > 0) {
+      alerts.push({
+        code: 'specialist_action_policy_denied',
+        agentKey: 'security',
+        agentName: 'Cross-agent security',
+        severity: 'warning',
+        observedValue: auditedActionPolicyDenials,
+        thresholdValue: 0,
+        unit: 'events',
+        message: `${auditedActionPolicyDenials} specialist action approval or execution attempt(s) were refused because the agent or a required source module was disabled.`,
+      });
+    }
+
     if (persistedToolCallRefusals >= 3) {
       alerts.push({
         code: 'repeated_specialist_tool_denials',
@@ -1537,6 +1672,10 @@ export class AiSettingsService {
       alerts,
       securityEvents: {
         auditedCrossTenantRunProbeDenials,
+        auditedOrchestrationAuthorizationDenials,
+        auditedAgentToolAuthorizationDenials,
+        auditedActionCrossTenantProbeDenials,
+        auditedActionPolicyDenials,
         auditedCommerceToolCallBlocks,
         persistedToolCallRefusals,
         auditedCommerceApprovalRefusals,
@@ -1553,12 +1692,12 @@ export class AiSettingsService {
         "Per-agent queued-run count and oldest age come from this business's persisted SpecialistAgentRun rows with status queued. They are not live Redis/BullMQ depth, worker-liveness checks, or proof that a job is still present in Redis.",
         'Material-action execution duration is measured from its persisted executing transition to its first terminal execution transition. Approval wait and provider latency are separate; actions without both timestamps are omitted. This is not business impact.',
         'Proposal revision counts include only append-only proposal_updated events on specialist material actions; other recommendation or canonical-record edits are outside this count.',
-        'Approval rejection and verification failure shares are calculated from persisted decision/verification events in this 30-day window. Repeated events on one action count separately; these are event shares, not action success rates or business outcomes.',
-        'Recorded tool names are the tool/context metadata attached to AI provider-call logs; they do not prove independent external execution. Per-tool elapsed-time samples are available only for completed or failed Commerce registry calls made by the Commerce agent or its internal orchestrations, using the recorded CommerceAgentToolRun duration. Manual user calls, blocked/refused calls, other agents, provider latency, queue wait, and business impact are excluded. The sample is capped at the 5,000 most recent calls in the 30-day window.',
-        'Persisted registered tool-call counts come from actual SpecialistAgentToolCall records in this 30-day window. The Commerce specialist loop is the only current producer; the status counts are business-scoped and do not represent provider invoices or comprehensive security monitoring.',
+        'Approval rejection and verification failure shares are calculated from persisted decision/verified/failed events in this 30-day window; currently open unknown-verification actions are counted separately and raise an operations alert, but are excluded from the failure-share denominator. Repeated events on one action count separately; these are event shares, not action success rates or business outcomes.',
+        'Recorded tool names are the tool/context metadata attached to AI provider-call logs; they do not prove independent external execution. The separate Commerce registry elapsed metric uses completed or failed CommerceAgentToolRun records made by the Commerce agent or its internal orchestrations. Registered-tool elapsed metrics come from timed SpecialistAgentToolCall records across gateway-integrated flows. Neither metric includes manual reads, provider latency, queue wait, or business impact; each sample is capped at the 5,000 most recent applicable records in the 30-day window.',
+        'Persisted registered tool-call counts come from actual SpecialistAgentToolCall records in this 30-day window. The shared gateway currently records calls from the Inventory, Finance, Customer, SEO and Commerce flows; coverage varies by flow, so these counts do not represent every source read. Counts are business-scoped and are not provider invoices or comprehensive security monitoring.',
         'Registered tool status counts use saved SpecialistAgentToolCall rows grouped by agent and tool in this 30-day window; elapsed-time percentiles use only succeeded/failed rows with a saved duration, capped at the 5,000 most recent timed calls per business. Status counts are not external execution confirmation; elapsed time is not provider latency or business impact.',
-        'Security counters include only audited denied cross-tenant run probes, Commerce unregistered/over-limit tool attempts, Commerce approval refusals after policy recheck, and Customer Agent message-queue refusals. They are not comprehensive security-event monitoring; other permission, stale-data, prompt-injection and policy blocks are not counted here.',
-        'Recent security-denial rows include only those four audited action types plus persisted blocked/refused specialist tool calls from this business in the 30-day window. Arbitrary audit payloads and tool inputs are not returned; the list is capped at 50 and is not a complete security-event feed.',
+        'Security counters include audited denied cross-tenant run and action probes, specialist action denials caused by a disabled agent or source module, Commerce unregistered/over-limit tool attempts, Commerce approval refusals after policy recheck, and Customer Agent message-queue refusals. They are not comprehensive security-event monitoring; other permission, stale-data, prompt-injection and policy blocks are not counted here.',
+        'Recent security-denial rows include those audited action types plus persisted blocked/refused specialist tool calls from this business in the 30-day window. Arbitrary audit payloads and tool inputs are not returned; the list is capped at 50 and is not a complete security-event feed.',
         'Monthly request and spend usage uses the current UTC month. Requests include reserved, failed and abandoned provider attempts; spend is a Haiku 4.5 application estimate from returned tokens plus the maximum reserved amount for pending or failed attempts, not a provider invoice.',
         'Evidence freshness shows the saved freshness labels and source/fetch timestamps on up to the 5,000 most recently fetched specialist evidence records in the 30-day window. It does not re-evaluate freshness, prove complete source coverage, or measure connector availability.',
         'Operational alerts are deterministic signals over saved specialist runs, AI call logs, action verification events, open material actions, sampled evidence freshness and configured monthly AI request/spend limits. A queued-run age warning is optional and uses the current business policy against saved run timestamps; it does not inspect live Redis/BullMQ. Budget bands are 70% and 90%; spend is an application estimate, not an invoice. This does not detect unusual cost spikes, external provider outages, or conditions outside the sampled 30-day evidence window.',
@@ -1597,6 +1736,7 @@ export class AiSettingsService {
         reason: true,
         requiredApproval: true,
         requiredApproverRole: true,
+        approvalExpiresAt: true,
         approvalReason: true,
         rejectionReason: true,
         createdByUserId: true,
@@ -1610,6 +1750,7 @@ export class AiSettingsService {
         executedAt: true,
         verifiedAt: true,
         closedAt: true,
+        run: { select: { output: true } },
         events: {
           where: { businessId },
           orderBy: [{ sequence: 'asc' }],
@@ -1627,15 +1768,43 @@ export class AiSettingsService {
       },
     });
 
+    const disabledModules = new Set(
+      await this.businessModules.disabledFor(businessId),
+    );
+    const safeActions = actions.map(({ run, events, ...action }) => {
+      const legacySources = legacySpecialistAgentSourceModules(action.agentKey);
+      const detailsRedacted =
+        !legacySources ||
+        specialistAgentRunDetailsHiddenByModuleSelection(
+          run.output,
+          disabledModules,
+          legacySources,
+        );
+      if (!detailsRedacted) return { ...action, events, detailsRedacted: false };
+      return {
+        ...action,
+        canonicalResourceId: null,
+        canonicalOperationId: null,
+        reason:
+          'Action details are hidden because a source module used by the review is disabled.',
+        approvalReason: null,
+        rejectionReason: null,
+        events: [],
+        detailsRedacted: true,
+        detailsRedactionMessage:
+          'Enable the source module and review a fresh agent run to access action details.',
+      };
+    });
+
     return {
       scope: 'current_business' as const,
       windowStart: windowStart.toISOString(),
       observedAt: observedAt.toISOString(),
       actionLimit: SPECIALIST_ACTION_AUDIT_LIMIT,
       eventsPerActionLimit: SPECIALIST_ACTION_AUDIT_EVENTS_PER_ACTION,
-      actions,
+      actions: safeActions,
       disclosure:
-        'This audit view includes up to 100 material actions from the last 30 days and up to 50 saved lifecycle events per action. It excludes proposed/actual payloads, evidence values and arbitrary event metadata. Canonical provider receipts are shown only when recorded by the owning module.',
+        'This audit view includes up to 100 material actions from the last 30 days and up to 50 saved lifecycle events per action. Pending approval deadlines are fixed when approval is requested; expired approvals cannot be approved or executed. It excludes proposed/actual payloads, evidence values and arbitrary event metadata. Action identifiers, reasons and timeline details are hidden while any source module used by the originating review is disabled; approval and execution are rechecked against that module selection. Canonical provider receipts are shown only when recorded by the owning module.',
     };
   }
 

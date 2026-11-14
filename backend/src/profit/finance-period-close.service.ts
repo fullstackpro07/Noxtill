@@ -56,7 +56,9 @@ export class FinancePeriodCloseService {
     businessId: string,
     month: string,
     requestedBranchId?: string,
+    options: { includeIntegrationState?: boolean } = {},
   ) {
+    const includeIntegrationState = options.includeIntegrationState ?? true;
     const range = monthRange(month);
     const businessIds = await this.branchScope.resolveIds(
       businessId,
@@ -117,13 +119,15 @@ export class FinancePeriodCloseService {
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         select: { id: true, businessId: true, refundAmount: true },
       }),
-      this.prisma.integration.findMany({
-        where: {
-          businessId: { in: businessIds },
-          provider: IntegrationProvider.xero,
-        },
-        select: { businessId: true, status: true, lastSyncAt: true },
-      }),
+      includeIntegrationState
+        ? this.prisma.integration.findMany({
+            where: {
+              businessId: { in: businessIds },
+              provider: IntegrationProvider.xero,
+            },
+            select: { businessId: true, status: true, lastSyncAt: true },
+          })
+        : Promise.resolve([]),
       this.prisma.financeJournalEntry.findMany({
         where: {
           businessId: { in: businessIds },
@@ -300,12 +304,24 @@ export class FinancePeriodCloseService {
             source: 'pending Return rows created during the selected month',
           },
           xeroSync: {
-            status: xeroConnected
-              ? ('connected' as const)
-              : ('not_connected' as const),
-            lastSyncAt: xero?.lastSyncAt?.toISOString() ?? null,
-            unsyncedOrderCount: unsyncedOrders?.length ?? null,
-            source: xeroConnected ? 'Order.accountingSyncedAt' : null,
+            status: !includeIntegrationState
+              ? ('not_evaluated' as const)
+              : xeroConnected
+                ? ('connected' as const)
+                : ('not_connected' as const),
+            lastSyncAt: includeIntegrationState
+              ? (xero?.lastSyncAt?.toISOString() ?? null)
+              : null,
+            unsyncedOrderCount: includeIntegrationState
+              ? (unsyncedOrders?.length ?? null)
+              : null,
+            source:
+              includeIntegrationState && xeroConnected
+                ? 'Order.accountingSyncedAt'
+                : null,
+            unavailableReason: includeIntegrationState
+              ? null
+              : 'Not evaluated because Integrations is disabled for this business.',
           },
           manualJournals: {
             postedCount: postedJournals.length,

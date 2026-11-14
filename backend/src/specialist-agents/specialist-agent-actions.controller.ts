@@ -25,7 +25,7 @@ export class SpecialistAgentActionsController {
   @Get(':id')
   get(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     this.assertOwner(user);
-    return this.actions.get(user.businessId, id);
+    return this.actions.get(user.businessId, id, user.sub);
   }
 
   @Get()
@@ -85,6 +85,21 @@ export class SpecialistAgentActionsController {
   ) {
     this.assertOwner(user);
     return this.actions.cancel(user.businessId, user.sub, id, input);
+  }
+
+  @Post(':id/resolve')
+  resolveUnknownOutcome(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() input: DecideSpecialistAgentActionDto,
+  ) {
+    this.assertOwner(user);
+    return this.actions.resolveUnknownOutcome(
+      user.businessId,
+      user.sub,
+      id,
+      input,
+    );
   }
 
   private assertOwner(user: AuthenticatedUser) {

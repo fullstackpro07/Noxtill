@@ -8,16 +8,22 @@ import {
   StockMovementKind,
 } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
+import { createHash } from 'node:crypto';
 import { AiInfraService } from '../ai/ai-infra.service';
 import { describeAiSummaryProviderFailure } from '../ai/ai-provider-error.util';
 import { AppException } from '../common/filters/app.exception';
-import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
+import {
+  isSpecialistSourceModuleDisabledError,
+  SpecialistAgentPolicyService,
+} from '../common/agents/specialist-agent-policy.service';
+import { hasRequiredSpecialistAgentAnswerSections } from '../common/agents/specialist-agent-answer.util';
 import {
   SpecialistAgentToolGatewayService,
   type RegisteredSpecialistAgentTool,
 } from '../common/agents/specialist-agent-tool-gateway.service';
 import {
   recordSpecialistAgentRunCreatedEvent,
+  recordSpecialistAgentRunStartedEvent,
   recordSpecialistAgentRunTerminalEvent,
 } from '../common/agents/specialist-agent-run-events.util';
 import {
@@ -53,7 +59,8 @@ import {
 } from '../common/agents/specialist-agent-run-options';
 
 const AGENT_KEY = 'inventory_intelligence';
-const AGENT_VERSION = '1.10.0';
+const AGENT_VERSION = '1.14.0';
+const MAX_INVENTORY_QUESTION_LENGTH = 1_000;
 const FORMULA_VERSION =
   'reorder-suggestions-v1+tenant-lead-time-v1+open-purchase-offset-v1+lead-time-sensitivity-v1+demand-backtest-interval-v1+prior-year-recorded-sales-comparison-v1+purchase-pack-rounding-v1+product-minimum-reorder-v1+branch-transfer-availability-v1+no-recent-demand-review-v1';
 const DEMAND_HISTORY_WEEKS = 52;
@@ -81,6 +88,8 @@ const INVENTORY_STOCK_MOVEMENTS_TOOL_KEY = 'get_stock_movements';
 const INVENTORY_SALES_VELOCITY_TOOL_KEY = 'get_sales_velocity';
 const INVENTORY_OPEN_PURCHASE_ORDERS_TOOL_KEY = 'get_open_purchase_orders';
 const INVENTORY_STOCK_COUNT_VARIANCES_TOOL_KEY = 'get_stock_count_variances';
+const INVENTORY_SUPPLIER_TERMS_TOOL_KEY = 'get_supplier_terms';
+const INVENTORY_BRANCH_TRANSFER_RULES_TOOL_KEY = 'get_branch_transfer_rules';
 const INVENTORY_STOCK_MOVEMENTS_DEFAULT_DAYS = 30;
 const INVENTORY_STOCK_MOVEMENTS_MAX_DAYS = 365;
 const INVENTORY_STOCK_MOVEMENTS_DEFAULT_LIMIT = 50;
@@ -96,6 +105,7 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     riskClass: 'READ_ONLY',
     executable: true,
     exposedToReadOnlyAssistant: true,
+    requiredModules: ['products'],
     maxOutputBytes: 1_048_576,
     screen: '/inventory/reorder-suggestions',
   },
@@ -109,6 +119,7 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     riskClass: 'READ_ONLY',
     executable: true,
     exposedToReadOnlyAssistant: true,
+    requiredModules: ['products'],
     maxOutputBytes: 32_000,
     screen: '/inventory',
   },
@@ -122,6 +133,7 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     riskClass: 'READ_ONLY',
     executable: true,
     exposedToReadOnlyAssistant: true,
+    requiredModules: ['products'],
     maxOutputBytes: 64_000,
     screen: '/inventory/movements',
   },
@@ -135,6 +147,7 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     riskClass: 'READ_ONLY',
     executable: true,
     exposedToReadOnlyAssistant: true,
+    requiredModules: ['products'],
     maxOutputBytes: 32_000,
     screen: '/inventory/reorder-suggestions',
   },
@@ -148,6 +161,7 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     riskClass: 'READ_ONLY',
     executable: true,
     exposedToReadOnlyAssistant: true,
+    requiredModules: ['products'],
     maxOutputBytes: 64_000,
     screen: '/inventory/purchases',
   },
@@ -161,8 +175,36 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     riskClass: 'READ_ONLY',
     executable: true,
     exposedToReadOnlyAssistant: true,
+    requiredModules: ['products'],
     maxOutputBytes: 64_000,
     screen: '/inventory/stock-count',
+  },
+  {
+    key: INVENTORY_SUPPLIER_TERMS_TOOL_KEY,
+    label: 'Read confirmed supplier terms',
+    description:
+      'Read operational terms from current, active and confirmed supplier contracts in this business. Monetary prices, contract documents and free-form notes are not returned.',
+    inputs: ['supplierId'],
+    requiredInputs: ['supplierId'],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    maxOutputBytes: 32_000,
+    screen: '/procurement/contracts',
+  },
+  {
+    key: INVENTORY_BRANCH_TRANSFER_RULES_TOOL_KEY,
+    label: 'Read branch transfer constraints',
+    description:
+      'Explain the canonical branch transfer validation constraints and whether multiple active locations exist. This does not create or approve a transfer.',
+    inputs: [],
+    requiredInputs: [],
+    riskClass: 'READ_ONLY',
+    executable: true,
+    exposedToReadOnlyAssistant: true,
+    requiredModules: ['branches'],
+    maxOutputBytes: 16_000,
+    screen: '/inventory/reorder-suggestions',
   },
   {
     key: INVENTORY_BRANCH_REBALANCE_TOOL_KEY,
@@ -174,6 +216,7 @@ const INVENTORY_AGENT_TOOLS: readonly RegisteredSpecialistAgentTool[] = [
     riskClass: 'READ_ONLY',
     executable: true,
     exposedToReadOnlyAssistant: true,
+    requiredModules: ['branches', 'products'],
     maxOutputBytes: 262_144,
     screen: '/inventory/reorder-suggestions',
   },
@@ -424,6 +467,7 @@ function buildSamePeriodRecordedSalesComparison(weeklySales: number[]) {
 }
 
 type AiSummary = {
+  mode: 'review' | 'question';
   status: 'ready' | 'not_configured' | 'blocked' | 'unavailable' | 'not_needed';
   text: string | null;
   message: string | null;
@@ -449,6 +493,78 @@ type AgentDraftRecommendation = {
   };
 };
 
+function sanitizeInventoryQuestionEvidence(
+  value: unknown,
+  depth = 0,
+  budget: { remainingBytes: number; truncated: boolean } = {
+    remainingBytes: 32_000,
+    truncated: false,
+  },
+): Prisma.InputJsonValue | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (depth > 3 || budget.remainingBytes <= 0) {
+    budget.truncated = true;
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    const bounded = value.slice(0, 300);
+    if (bounded.length < value.length) budget.truncated = true;
+    budget.remainingBytes -= bounded.length * 4;
+    return bounded;
+  }
+  if (typeof value === 'boolean') {
+    budget.remainingBytes -= 8;
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return undefined;
+    budget.remainingBytes -= 16;
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (value.length > 12) budget.truncated = true;
+    const items = value
+      .slice(0, 12)
+      .map((item) =>
+        sanitizeInventoryQuestionEvidence(item, depth + 1, budget),
+      )
+      .filter((item): item is Prisma.InputJsonValue => item !== undefined);
+    return items as Prisma.InputJsonArray;
+  }
+  if (typeof value !== 'object') return undefined;
+
+  const safeEntries = Object.entries(value as Record<string, unknown>).filter(
+    ([key]) => {
+      const normalized = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+      return !(
+        /(^|_)(id|ids|reference|email|phone|address|url|secret|token|note|contact)(_|$)/.test(
+          normalized,
+        ) ||
+        /cost|price|amount|balance|valuation|spend|revenue|margin|currency|subtotal|monetary|order_value|unit_value/.test(
+          normalized,
+        )
+      );
+    },
+  );
+  if (safeEntries.length > 30) budget.truncated = true;
+  const entries = safeEntries
+    .slice(0, 30)
+    .map(([key, child]) => {
+      budget.remainingBytes -= key.length * 4 + 8;
+      return [
+        key,
+        sanitizeInventoryQuestionEvidence(child, depth + 1, budget),
+      ] as const;
+    })
+    .filter(
+      (entry): entry is readonly [string, Prisma.InputJsonValue] =>
+        entry[1] !== undefined,
+    );
+  return Object.fromEntries(entries) as Prisma.InputJsonObject;
+}
+
 @Injectable()
 export class InventoryIntelligenceService {
   constructor(
@@ -468,6 +584,143 @@ export class InventoryIntelligenceService {
       '13',
       INVENTORY_AGENT_TOOLS,
       async (context, tool, input) => {
+        if (tool.key === INVENTORY_SUPPLIER_TERMS_TOOL_KEY) {
+          const supplierId = input.supplierId.trim();
+          if (!supplierId || supplierId.length > 100) {
+            throw new AppException(
+              'INVENTORY_AGENT_TOOL_INPUT_INVALID',
+              'Enter a supplier ID from this business to read its confirmed operational terms.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          const observedAt = new Date();
+          const contracts = await this.tenantPrisma.client.procurementSupplierContract.findMany({
+            where: {
+              businessId: context.businessId,
+              supplierId,
+              status: 'active',
+              termsConfirmedAt: { not: null },
+              effectiveFrom: { lte: observedAt },
+              OR: [{ expiresAt: null }, { expiresAt: { gte: observedAt } }],
+            },
+            orderBy: [{ effectiveFrom: 'desc' }, { id: 'asc' }],
+            take: 26,
+            select: {
+              categories: true,
+              minimumOrderQty: true,
+              effectiveFrom: true,
+              expiresAt: true,
+              autoRenew: true,
+              noticeDays: true,
+              incoterms: true,
+              termsConfirmedAt: true,
+              version: true,
+            },
+          });
+          const budget = { remainingBytes: 8_000, truncated: false };
+          const visibleContracts = contracts.slice(0, 25);
+          const terms = visibleContracts.map((contract) => ({
+            categories:
+              sanitizeInventoryQuestionEvidence(
+                contract.categories,
+                0,
+                budget,
+              ) ?? [],
+            minimumOrderQty: contract.minimumOrderQty,
+            effectiveFrom: contract.effectiveFrom.toISOString(),
+            expiresAt: contract.expiresAt?.toISOString() ?? null,
+            autoRenew: contract.autoRenew,
+            noticeDays: contract.noticeDays,
+            incoterms: contract.incoterms,
+            termsConfirmedAt: contract.termsConfirmedAt?.toISOString() ?? null,
+            version: contract.version,
+          }));
+          return {
+            output: {
+              state: terms.length > 0 ? 'available' : 'no_confirmed_active_terms',
+              businessScope: 'current_business',
+              contractCount: terms.length,
+              hasMore: contracts.length > visibleContracts.length,
+              termsTruncated:
+                contracts.length > visibleContracts.length ||
+                budget.truncated ||
+                budget.remainingBytes <= 0,
+              contracts: terms,
+              observedAt: observedAt.toISOString(),
+              disclosure:
+                'Terms are read from active, currently effective supplier contract records in Inventory with a recorded confirmation. This result omits contract prices, payment terms, documents and free-form notes. A missing result does not establish that no supplier agreement exists outside Noxtill.',
+            },
+            status: 'succeeded',
+            summary:
+              terms.length > 0
+                ? `Read ${terms.length} current confirmed operational supplier term record(s); no procurement record was changed.`
+                : 'No current confirmed operational supplier terms are recorded in this business.',
+            outputResourceType: 'ConfirmedSupplierTerms',
+          };
+        }
+
+        if (tool.key === INVENTORY_BRANCH_TRANSFER_RULES_TOOL_KEY) {
+          const disabledModules =
+            await this.agentPolicy.disabledModulesForBusiness(
+              context.businessId,
+            );
+          if (disabledModules.includes('branches')) {
+            throw new AppException(
+              'BUSINESS_MODULE_DISABLED',
+              'Enable Branches in Settings → Modules before the Inventory Agent can read branch-transfer constraints.',
+              HttpStatus.FORBIDDEN,
+            );
+          }
+          const currentBusiness = await this.prisma.business.findUnique({
+            where: { id: context.businessId },
+            select: { id: true, parentId: true },
+          });
+          if (!currentBusiness) {
+            throw new AppException(
+              'INVENTORY_AGENT_BUSINESS_NOT_FOUND',
+              'The current business could not be found.',
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          const rootBusinessId = currentBusiness.parentId ?? currentBusiness.id;
+          const locations = await this.prisma.business.findMany({
+            where: {
+              active: true,
+              OR: [
+                { id: rootBusinessId },
+                { parentId: rootBusinessId },
+              ],
+            },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          });
+          return {
+            output: {
+              state:
+                locations.length > 1
+                  ? 'multiple_active_locations'
+                  : 'single_active_location',
+              activeLocationCount: locations.length,
+              configuration: 'no_separate_transfer_policy_record',
+              canonicalConstraints: [
+                'Source and destination must be different businesses in the same branch group.',
+                'Every requested source product must belong to the source business.',
+                'A source product must have a SKU and the destination must have a matching product before approval and receipt.',
+                'The source branch ships the transfer and the destination branch records receipt.',
+              ],
+              observedAt: new Date().toISOString(),
+              disclosure:
+                'These are the validations enforced by the canonical StockTransfersService. No separate tenant-configurable transfer-rule record exists. Review calculated stock availability separately; this tool does not authorize or create a transfer.',
+            },
+            status: 'succeeded',
+            summary:
+              locations.length > 1
+                ? `Read canonical transfer constraints for a branch group with ${locations.length} active location(s); no transfer was created.`
+                : 'Read canonical transfer constraints; this branch group currently has only one active location, so inter-branch rebalancing is unavailable.',
+            outputResourceType: 'BranchTransferConstraints',
+          };
+        }
+
         if (tool.key === INVENTORY_STOCK_BALANCE_TOOL_KEY) {
           const productId = input.productId.trim();
           if (!productId) {
@@ -836,6 +1089,17 @@ export class InventoryIntelligenceService {
         }
 
         if (tool.key === INVENTORY_BRANCH_REBALANCE_TOOL_KEY) {
+          const disabledModules =
+            await this.agentPolicy.disabledModulesForBusiness(
+              context.businessId,
+            );
+          if (disabledModules.includes('branches')) {
+            throw new AppException(
+              'BUSINESS_MODULE_DISABLED',
+              'Enable Branches in Settings → Modules before the Inventory Agent can compare branch stock.',
+              HttpStatus.FORBIDDEN,
+            );
+          }
           const review = await this.buildBranchRebalanceRecommendations(
             context.businessId,
             new Date(),
@@ -901,10 +1165,18 @@ export class InventoryIntelligenceService {
             HttpStatus.BAD_REQUEST,
           );
         }
+        const disabledModules =
+          await this.agentPolicy.disabledModulesForBusiness(
+            context.businessId,
+          );
         const groups = await this.reorderSuggestions.list(
           context.businessId,
           leadTimeDays,
-          { includeCovered: true },
+          {
+            includeCovered: true,
+            includeProcurement: true,
+            includeBranches: !disabledModules.includes('branches'),
+          },
         );
         const itemCount = groups.reduce(
           (sum, group) => sum + group.items.length,
@@ -920,9 +1192,9 @@ export class InventoryIntelligenceService {
     );
   }
 
-  listRuns(businessId: string) {
+  async listRuns(businessId: string) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
-    return this.tenantPrisma.client.specialistAgentRun.findMany({
+    const runs = await this.tenantPrisma.client.specialistAgentRun.findMany({
       where: { businessId: scopedBusinessId, agentKey: AGENT_KEY },
       orderBy: { createdAt: 'desc' },
       take: 10,
@@ -954,6 +1226,121 @@ export class InventoryIntelligenceService {
         },
       },
     });
+
+    const disabledModules = new Set(
+      await this.agentPolicy.disabledModulesForBusiness(scopedBusinessId),
+    );
+    const productsDisabled = disabledModules.has('products');
+    const customersDisabled = disabledModules.has('customers');
+    const branchesDisabled = disabledModules.has('branches');
+    if (!productsDisabled && !customersDisabled && !branchesDisabled) return runs;
+
+    // Saved snapshots can outlive the module selection under which they were produced. Product
+    // analysis cannot be separated from its product master; when Products is off, the whole saved
+    // evidence bundle is hidden. Customer and branch-only findings stay selectively redacted.
+    return runs.map((run) => {
+      if (productsDisabled) {
+        return {
+          ...run,
+          inputRefs: [],
+          output: {
+            summary:
+              'Saved Inventory details are hidden because Products is disabled. Enable Products and run a new review to refresh product-level stock evidence.',
+            recommendationCount: 0,
+            moduleSelectionVersion: 1,
+            moduleSources: { inventory: 'included', products: 'disabled' },
+            aiSummary: null,
+          },
+          recommendations: [],
+        };
+      }
+      const output =
+        run.output &&
+        typeof run.output === 'object' &&
+        !Array.isArray(run.output)
+          ? (run.output as Prisma.JsonObject)
+          : {};
+      const moduleSourcesValue = output.moduleSources;
+      const moduleSources =
+        moduleSourcesValue &&
+        typeof moduleSourcesValue === 'object' &&
+        !Array.isArray(moduleSourcesValue)
+          ? (moduleSourcesValue as Prisma.JsonObject)
+          : {};
+      const recommendations = run.recommendations.filter((recommendation) => {
+        const details =
+          recommendation.details &&
+          typeof recommendation.details === 'object' &&
+          !Array.isArray(recommendation.details)
+            ? (recommendation.details as Prisma.JsonObject)
+            : {};
+        return !(
+          (customersDisabled && details.signalType === 'back_in_stock') ||
+          (branchesDisabled && details.signalType === 'branch_rebalance')
+        );
+      });
+      const signalCountsValue = output.signalCounts;
+      const signalCounts = {
+        ...(signalCountsValue &&
+        typeof signalCountsValue === 'object' &&
+        !Array.isArray(signalCountsValue)
+          ? (signalCountsValue as Prisma.JsonObject)
+          : {}),
+      };
+      if (customersDisabled) delete signalCounts.backInStockReview;
+      if (branchesDisabled) delete signalCounts.branchRebalance;
+
+      const inputRefs = (Array.isArray(run.inputRefs)
+        ? run.inputRefs
+        : []
+      ).filter(
+        (inputRef) => {
+          if (
+            typeof inputRef !== 'object' ||
+            inputRef === null ||
+            Array.isArray(inputRef)
+          ) {
+            return true;
+          }
+          const source = (inputRef as Prisma.JsonObject).source;
+          return !(
+            (customersDisabled &&
+              source === 'ProductWaitlistEntry.groupBy') ||
+            (branchesDisabled &&
+              source === 'BranchGroup.products_stock_movements_stock_transfers')
+          );
+        },
+      );
+
+      return {
+        ...run,
+        inputRefs,
+        output: {
+          ...output,
+          message:
+            'Findings from currently disabled source modules are hidden. Re-run the Inventory Agent after changing module access to refresh this snapshot.',
+          summary:
+            'Saved Inventory findings are shown under the current module selection. Customer or branch findings from disabled modules are hidden.',
+          recommendationCount: recommendations.length,
+          signalCounts,
+          moduleSources: {
+            ...moduleSources,
+            customers: customersDisabled
+              ? 'disabled'
+              : moduleSources.customers,
+            branches: branchesDisabled ? 'disabled' : moduleSources.branches,
+          },
+          branchRebalanceAvailability: branchesDisabled
+            ? 'module_disabled'
+            : output.branchRebalanceAvailability,
+          activeLocationCount: branchesDisabled
+            ? null
+            : output.activeLocationCount,
+          aiSummary: null,
+        },
+        recommendations,
+      };
+    });
   }
 
   /**
@@ -963,6 +1350,8 @@ export class InventoryIntelligenceService {
    */
   async listActionOutcomes(businessId: string) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
+    await this.agentPolicy.assertEnabled(scopedBusinessId, 'inventory');
+
     const recommendations =
       await this.prisma.specialistAgentRecommendation.findMany({
         where: { businessId: scopedBusinessId, agentKey: AGENT_KEY },
@@ -1343,6 +1732,12 @@ export class InventoryIntelligenceService {
    */
   async listBranchTransferOutcomes(businessId: string) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
+    const disabledModules =
+      await this.agentPolicy.disabledModulesForBusiness(scopedBusinessId);
+    // Cross-location stock and transfer records belong to Branches. Do not
+    // expose those records in Inventory while the business has disabled it.
+    if (disabledModules.includes('branches')) return [];
+
     const recommendations =
       await this.prisma.specialistAgentRecommendation.findMany({
         where: { businessId: scopedBusinessId, agentKey: AGENT_KEY },
@@ -1356,12 +1751,22 @@ export class InventoryIntelligenceService {
           details: true,
         },
       });
+    const branchGroup = await this.resolveActiveBranchGroupBusinesses(
+      scopedBusinessId,
+    );
+    const activeBranchIds = new Set(branchGroup.map((branch) => branch.id));
+    const branchNameById = new Map(
+      branchGroup.map((branch) => [branch.id, branch.name]),
+    );
     const branchRecommendations = recommendations.filter((recommendation) => {
       const details = recommendation.details as Prisma.JsonObject;
       return (
         details.signalType === 'branch_rebalance' &&
         typeof details.sourceBusinessId === 'string' &&
+        activeBranchIds.has(details.sourceBusinessId) &&
         typeof details.destinationBusinessId === 'string' &&
+        activeBranchIds.has(details.destinationBusinessId) &&
+        details.sourceBusinessId !== details.destinationBusinessId &&
         typeof details.sourceProductId === 'string' &&
         typeof details.destinationProductId === 'string'
       );
@@ -1373,8 +1778,8 @@ export class InventoryIntelligenceService {
       where: {
         sourceSpecialistAgentRecommendationId: { in: recommendationIds },
         OR: [
-          { sourceBusinessId: scopedBusinessId },
-          { destBusinessId: scopedBusinessId },
+          { sourceBusinessId: { in: [...activeBranchIds] } },
+          { destBusinessId: { in: [...activeBranchIds] } },
         ],
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -1460,15 +1865,11 @@ export class InventoryIntelligenceService {
         recommendationCreatedAt: recommendation.createdAt,
         source: {
           businessId: sourceBusinessId,
-          businessName:
-            typeof details.sourceBusinessName === 'string'
-              ? details.sourceBusinessName
-              : 'Branch name not recorded',
+          businessName: branchNameById.get(sourceBusinessId) ?? 'Not available',
           productId: sourceProductId,
           productName:
-            typeof details.productName === 'string'
-              ? details.productName
-              : 'Product name not recorded',
+            branchProductByKey.get(`${sourceBusinessId}:${sourceProductId}`)
+              ?.name ?? 'Not available',
           currentStock:
             branchProductByKey.get(`${sourceBusinessId}:${sourceProductId}`)
               ?.stockQty ?? null,
@@ -1476,9 +1877,7 @@ export class InventoryIntelligenceService {
         destination: {
           businessId: destinationBusinessId,
           businessName:
-            typeof details.destinationBusinessName === 'string'
-              ? details.destinationBusinessName
-              : 'Branch name not recorded',
+            branchNameById.get(destinationBusinessId) ?? 'Not available',
           productId: destinationProductId,
           productName:
             branchProductByKey.get(
@@ -1900,6 +2299,15 @@ export class InventoryIntelligenceService {
   ) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
     await this.agentPolicy.assertEnabled(scopedBusinessId, 'inventory');
+    const disabledModules =
+      await this.agentPolicy.disabledModulesForBusiness(scopedBusinessId);
+    if (disabledModules.includes('branches')) {
+      throw new AppException(
+        'BUSINESS_MODULE_DISABLED',
+        'Enable Branches in Settings → Modules before preparing an Inventory Agent transfer request.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     const recommendation =
       await this.tenantPrisma.client.specialistAgentRecommendation.findFirst({
         where: {
@@ -2409,9 +2817,40 @@ export class InventoryIntelligenceService {
     actorUserId: string | null,
     idempotencyKey?: string,
     options: SpecialistAgentRunOptions = {},
+    question?: string,
   ) {
     const scopedBusinessId = this.scopedBusinessId(businessId);
     await this.agentPolicy.assertEnabled(scopedBusinessId, 'inventory');
+    const disabledModules =
+      await this.agentPolicy.disabledModulesForBusiness(scopedBusinessId);
+    if (disabledModules.includes('products')) {
+      throw new AppException(
+        'BUSINESS_MODULE_DISABLED',
+        'Enable Products in Settings → Modules before the Inventory Agent reads product-level stock and sales evidence.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    // Purchasing and supplier records are part of the Inventory module in this product;
+    // there is no separate Procurement toggle in BUSINESS_MODULES.
+    const purchasingEnabled = true;
+    const branchesModuleEnabled = !disabledModules.includes('branches');
+    const customersModuleEnabled = !disabledModules.includes('customers');
+    const normalizedQuestion = question?.trim() || null;
+    if (
+      question !== undefined &&
+      (!normalizedQuestion ||
+        normalizedQuestion.length < 4 ||
+        normalizedQuestion.length > MAX_INVENTORY_QUESTION_LENGTH)
+    ) {
+      throw new AppException(
+        'INVENTORY_AGENT_QUESTION_INVALID',
+        `Enter an Inventory question between 4 and ${MAX_INVENTORY_QUESTION_LENGTH} characters.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const questionHash = normalizedQuestion
+      ? createHash('sha256').update(normalizedQuestion).digest('hex')
+      : null;
     const policyOwner = await this.prisma.business.findUnique({
       where: { id: scopedBusinessId },
       select: { policies: true },
@@ -2429,8 +2868,9 @@ export class InventoryIntelligenceService {
     const reorderLeadTimeDays =
       resolvePolicies(policyOwner).num('inventory.agentReorderLeadTimeDays') ??
       REORDER_LEAD_TIME_DAYS;
-    const branchGroupBusinesses =
-      await this.resolveActiveBranchGroupBusinesses(scopedBusinessId);
+    const branchGroupBusinesses = branchesModuleEnabled
+      ? await this.resolveActiveBranchGroupBusinesses(scopedBusinessId)
+      : [];
     const startedAt = new Date();
     const runData: Prisma.SpecialistAgentRunUncheckedCreateInput = {
       businessId: scopedBusinessId,
@@ -2451,9 +2891,12 @@ export class InventoryIntelligenceService {
           salesWindowDays: REORDER_VELOCITY_WINDOW_DAYS,
           baselineLeadTimeDays: reorderLeadTimeDays,
           productInputs: ['Product.minimumReorderQty'],
+          purchasingEnabled,
+          branchesModuleEnabled,
         },
         {
           source: 'ProcurementSupplierContract',
+          moduleEnabled: purchasingEnabled,
           fields: [
             'minimumOrderQty',
             'currency',
@@ -2468,6 +2911,7 @@ export class InventoryIntelligenceService {
         },
         {
           source: 'PurchaseOrder.sentAt_to_receivedAt',
+          moduleEnabled: purchasingEnabled,
           status: PurchaseOrderStatus.received,
           lookbackDays: SUPPLIER_LEAD_TIME_LOOKBACK_DAYS,
           pairKey: 'supplierId+productId',
@@ -2476,12 +2920,14 @@ export class InventoryIntelligenceService {
         },
         {
           source: 'ProductWaitlistEntry.groupBy',
+          moduleEnabled: customersModuleEnabled,
           statusFilter: 'not_notified',
           productFilters: ['active', 'tracked_product', 'positive_on_hand'],
           customerDetailsRead: false,
         },
         {
           source: 'BranchGroup.products_stock_movements_stock_transfers',
+          moduleEnabled: branchesModuleEnabled,
           scopeBusinessIds: branchGroupBusinesses.map((branch) => branch.id),
           lookbackDays: REORDER_VELOCITY_WINDOW_DAYS,
           senderExcessCoverDays: BRANCH_REBALANCE_COVER_DAYS,
@@ -2500,6 +2946,16 @@ export class InventoryIntelligenceService {
           valuation: 'canonical_stock_qty_times_cost_price',
           includesZeroCostPriceRows: true,
         },
+        ...(questionHash
+          ? [
+              {
+                source: 'inventory_agent_read_only_question',
+                scope: 'current_business_saved_inventory_review',
+                questionSha256: questionHash,
+                questionStored: false,
+              },
+            ]
+          : []),
       ],
       policyResult: {
         autonomyLevel: 'L0',
@@ -2513,6 +2969,7 @@ export class InventoryIntelligenceService {
         this.tenantPrisma.client.$transaction(async (tx) => {
           const run = await tx.specialistAgentRun.create({ data });
           await recordSpecialistAgentRunCreatedEvent(tx, run);
+          await recordSpecialistAgentRunStartedEvent(tx, run);
           return run;
         }),
       (keyBusinessId, agentKey, idempotencyKeyHash) =>
@@ -2525,7 +2982,7 @@ export class InventoryIntelligenceService {
         }),
       runData,
       idempotencyKey,
-      { businessId: scopedBusinessId },
+      { businessId: scopedBusinessId, questionHash },
       (configBusinessId, agentKey) =>
         ensureSpecialistAgentConfigVersion(
           this.prisma,
@@ -2641,28 +3098,30 @@ export class InventoryIntelligenceService {
           _count: { _all: true },
           _max: { createdAt: true },
         }),
-        this.tenantPrisma.client.purchaseOrder.findMany({
-          where: {
-            businessId: scopedBusinessId,
-            status: {
-              in: [
-                PurchaseOrderStatus.sent,
-                PurchaseOrderStatus.confirmed,
-                PurchaseOrderStatus.partially_received,
-              ],
-            },
-          },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          include: {
-            items: {
-              select: {
-                productId: true,
-                qtyOrdered: true,
-                qtyReceived: true,
+        purchasingEnabled
+          ? this.tenantPrisma.client.purchaseOrder.findMany({
+              where: {
+                businessId: scopedBusinessId,
+                status: {
+                  in: [
+                    PurchaseOrderStatus.sent,
+                    PurchaseOrderStatus.confirmed,
+                    PurchaseOrderStatus.partially_received,
+                  ],
+                },
               },
-            },
-          },
-        }),
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              include: {
+                items: {
+                  select: {
+                    productId: true,
+                    qtyOrdered: true,
+                    qtyReceived: true,
+                  },
+                },
+              },
+            })
+          : Promise.resolve([]),
         this.tenantPrisma.client.$queryRaw<WeeklyDemandRow[]>`
             SELECT demand.productId, demand.weeksAgo,
               SUM(demand.recordedUnits) AS recordedUnits,
@@ -2684,28 +3143,36 @@ export class InventoryIntelligenceService {
             GROUP BY demand.productId, demand.weeksAgo
             ORDER BY demand.productId ASC, demand.weeksAgo ASC
           `,
-        this.tenantPrisma.client.productWaitlistEntry.groupBy({
-          by: ['productId'],
-          where: {
-            businessId: scopedBusinessId,
-            notifiedAt: null,
-            product: {
-              is: {
-                active: true,
-                kind: ProductKind.product,
-                stockQty: { gt: 0 },
+        customersModuleEnabled
+          ? this.tenantPrisma.client.productWaitlistEntry.groupBy({
+              by: ['productId'],
+              where: {
+                businessId: scopedBusinessId,
+                notifiedAt: null,
+                product: {
+                  is: {
+                    active: true,
+                    kind: ProductKind.product,
+                    stockQty: { gt: 0 },
+                  },
+                },
               },
-            },
-          },
-          _count: { _all: true },
-          _min: { createdAt: true },
-          orderBy: { productId: 'asc' },
-        }),
-        this.buildBranchRebalanceRecommendations(
-          scopedBusinessId,
-          observedAt,
-          branchGroupBusinesses,
-        ),
+              _count: { _all: true },
+              _min: { createdAt: true },
+              orderBy: { productId: 'asc' },
+            })
+          : Promise.resolve([]),
+        branchesModuleEnabled
+          ? this.buildBranchRebalanceRecommendations(
+              scopedBusinessId,
+              observedAt,
+              branchGroupBusinesses,
+            )
+          : Promise.resolve({
+              recommendations: [],
+              availability: 'module_disabled' as const,
+              activeLocationCount: 0,
+            }),
         this.buildRepeatedStockCountRecommendations(
           scopedBusinessId,
           observedAt,
@@ -2727,7 +3194,8 @@ export class InventoryIntelligenceService {
             .filter((supplierId): supplierId is string => Boolean(supplierId)),
         ),
       ];
-      const supplierContracts = reorderSupplierIds.length
+      const supplierContracts =
+        purchasingEnabled && reorderSupplierIds.length > 0
         ? await this.tenantPrisma.client.procurementSupplierContract.findMany({
             where: {
               businessId: scopedBusinessId,
@@ -2772,7 +3240,9 @@ export class InventoryIntelligenceService {
           SUPPLIER_LEAD_TIME_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
       );
       const completedSupplierPurchaseOrders =
-        reorderSupplierIds.length > 0 && reorderProductIds.length > 0
+        purchasingEnabled &&
+        reorderSupplierIds.length > 0 &&
+        reorderProductIds.length > 0
           ? await this.tenantPrisma.client.purchaseOrder.findMany({
               where: {
                 businessId: scopedBusinessId,
@@ -2846,11 +3316,16 @@ export class InventoryIntelligenceService {
           );
         }
       }
-      const inventoryTransferAvailability = await branchTransferAvailability(
-        this.prisma,
-        scopedBusinessId,
-        inventoryRows.map(({ id, sku }) => ({ id, sku })),
-      );
+      const inventoryTransferAvailability = branchesModuleEnabled
+        ? await branchTransferAvailability(
+            this.prisma,
+            scopedBusinessId,
+            inventoryRows.map(({ id, sku }) => ({ id, sku })),
+          )
+        : new Map<
+            string,
+            { committedOutboundQty: number; incomingQty: number }
+          >();
       for (const [productId, availability] of inventoryTransferAvailability) {
         incomingTransferQtyByProduct.set(productId, availability.incomingQty);
       }
@@ -3778,19 +4253,134 @@ export class InventoryIntelligenceService {
           };
         }),
       ];
+      const questionEvidenceBudget = {
+        remainingBytes: 16_000,
+        truncated: false,
+      };
+      const questionEvidenceLimit = 8;
+      const questionRecommendations = recommendations.filter(
+        (recommendation) =>
+          recommendation.details.signalType !== 'inventory_value_exposure',
+      );
+      const questionTextTruncated = questionRecommendations
+        .slice(0, questionEvidenceLimit)
+        .some(
+          (recommendation) =>
+            recommendation.title.length > 300 ||
+            recommendation.summary.length > 400 ||
+            recommendation.assumptions.length > 4 ||
+            recommendation.assumptions
+              .slice(0, 4)
+              .some((item) => item.length > 180) ||
+            recommendation.missingData.length > 4 ||
+            recommendation.missingData
+              .slice(0, 4)
+              .some((item) => item.length > 180) ||
+            recommendation.evidence.fieldRefs.length > 16 ||
+            recommendation.evidence.calculation.length > 900,
+        );
+      const questionEvidence = {
+        source: 'InventoryIntelligenceService.run',
+        observedAt: observedAt.toISOString(),
+        moduleSources: {
+          inventory: 'included',
+          products: 'included',
+          branches: branchesModuleEnabled ? 'included' : 'disabled',
+          customers: customersModuleEnabled ? 'included' : 'disabled',
+        },
+        formulaVersion: FORMULA_VERSION,
+        salesWindowDays: REORDER_VELOCITY_WINDOW_DAYS,
+        baselineLeadTimeDays: reorderLeadTimeDays,
+        signalCounts,
+        branchRebalanceAvailability: branchRebalance.availability,
+        activeLocationCount: branchRebalance.activeLocationCount,
+        findings: questionRecommendations
+          .slice(0, questionEvidenceLimit)
+          .map((recommendation) => ({
+            title: recommendation.title.slice(0, 300),
+            summary: recommendation.summary.slice(0, 400),
+            assumptions: recommendation.assumptions
+              .slice(0, 4)
+              .map((item) => item.slice(0, 180)),
+            missingData: recommendation.missingData
+              .slice(0, 4)
+              .map((item) => item.slice(0, 180)),
+            source: recommendation.evidence.resourceType,
+            sourceFields: recommendation.evidence.fieldRefs.slice(0, 16),
+            calculation: recommendation.evidence.calculation.slice(0, 900),
+            observedAt:
+              recommendation.evidence.observedAt?.toISOString() ?? null,
+            observedValues:
+              sanitizeInventoryQuestionEvidence(
+                recommendation.evidence.observedValues,
+                0,
+                questionEvidenceBudget,
+              ) ?? {},
+          })),
+        findingsTruncated:
+          questionRecommendations.length > questionEvidenceLimit,
+        findingTextTruncated: questionTextTruncated,
+        evidenceValuesTruncated:
+          questionEvidenceBudget.truncated ||
+          questionEvidenceBudget.remainingBytes <= 0,
+      } satisfies Prisma.InputJsonObject;
+      const includedSourceModules = normalizedQuestion
+        ? Object.entries(
+            questionEvidence.moduleSources as Record<string, unknown>,
+          )
+            .filter(([, state]) => state === 'included')
+            .map(([moduleKey]) => moduleKey)
+        : [
+            'inventory',
+            'products',
+            ...(branchesModuleEnabled ? ['branches'] : []),
+          ];
+      await this.toolGateway.assertToolSourcesEnabled(
+        scopedBusinessId,
+        AGENT_KEY,
+        [],
+        { actorUserId, runId: run.id },
+      );
       const aiSummary =
-        options.includeAiSummary === false
+        options.includeAiSummary === false && !normalizedQuestion
           ? null
-          : await this.summarize(scopedBusinessId, groupsForAiSummary, run.id);
-      const deterministicSummary = this.deterministicSummary(signalCounts);
+          : await this.summarize(
+              scopedBusinessId,
+              groupsForAiSummary,
+              run.id,
+              normalizedQuestion,
+              questionEvidence,
+              includedSourceModules,
+            );
+      await this.toolGateway.assertToolSourcesEnabled(
+        scopedBusinessId,
+        AGENT_KEY,
+        [],
+        { actorUserId, runId: run.id },
+      );
+      await this.agentPolicy.assertSourceModulesEnabledForBusiness(
+        scopedBusinessId,
+        includedSourceModules,
+      );
+      const deterministicSummary = this.deterministicSummary(signalCounts, {
+        customersEnabled: customersModuleEnabled,
+        branchesEnabled: branchesModuleEnabled,
+      });
       const finishedAt = new Date();
       const output = {
         summary: deterministicSummary,
         recommendationCount: recommendations.length,
         signalCounts,
+        moduleSelectionVersion: 1,
         branchRebalanceAvailability: branchRebalance.availability,
         activeLocationCount: branchRebalance.activeLocationCount,
         inventoryValuation,
+        moduleSources: {
+          inventory: 'included',
+          products: 'included',
+          branches: branchesModuleEnabled ? 'included' : 'disabled',
+          customers: customersModuleEnabled ? 'included' : 'disabled',
+        },
         observedAt: observedAt.toISOString(),
         formulaVersion: FORMULA_VERSION,
         salesWindowDays: REORDER_VELOCITY_WINDOW_DAYS,
@@ -3833,6 +4423,23 @@ export class InventoryIntelligenceService {
       );
 
       const completed = await this.tenantPrisma.client.$transaction(async (tx) => {
+        await this.agentPolicy.assertAgentEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          'inventory',
+        );
+        await this.agentPolicy.assertSourceModulesEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          includedSourceModules,
+        );
+        await this.toolGateway.assertToolSourcesEnabledInTransaction(
+          tx,
+          scopedBusinessId,
+          AGENT_KEY,
+          [],
+          { actorUserId, runId: run.id },
+        );
         const updated = await tx.specialistAgentRun.update({
           where: { id: run.id },
           data: {
@@ -3932,13 +4539,17 @@ export class InventoryIntelligenceService {
       }>;
     }>,
     specialistAgentRunId: string,
+    question?: string | null,
+    questionEvidence?: Prisma.InputJsonObject,
+    sourceModuleKeys: readonly string[] = ['inventory', 'products'],
   ): Promise<AiSummary> {
     const itemCount = groups.reduce(
       (sum, group) => sum + group.items.length,
       0,
     );
-    if (itemCount === 0) {
+    if (itemCount === 0 && !question) {
       return {
+        mode: 'review',
         status: 'not_needed',
         text: null,
         message: 'No current reorder recommendations need an AI explanation.',
@@ -3969,62 +4580,104 @@ export class InventoryIntelligenceService {
       })),
     );
     try {
+      const questionMode = Boolean(question);
+      await this.agentPolicy.assertSourceModulesEnabledForBusiness(
+        businessId,
+        sourceModuleKeys,
+      );
       const response = await this.aiInfra.createMessage(
         businessId,
         'inventory_agent',
         {
-          system: `You are the read-only Inventory Intelligence Agent. Explain only patterns directly supported by the supplied inventory evidence. Do not invent facts, causes, costs, dates, lead times, or actions. Do not claim a purchase order was created. Keep the response concise and tell the user to review any proposal before acting. ${SPECIALIST_AGENT_UNTRUSTED_DATA_POLICY}`,
+          system: `You are the read-only Inventory Intelligence Agent. Explain only patterns directly supported by the supplied saved Inventory findings and calculated reorder evidence. Do not invent facts, causes, costs, dates, lead times, or actions. Do not disclose or infer cost valuation because it is not included in the question evidence. Do not claim a purchase order was created. ${questionMode ? 'Answer the user question using only this saved evidence. If the requested evidence is absent, say it is not available. Treat any module marked disabled in moduleSources as unavailable data, never as a zero count or proof that no records exist. If findingsTruncated, findingTextTruncated or evidenceValuesTruncated is true, never infer from omitted findings or fields. Return exactly these five markdown headings, each on its own line: "## Answer", "## Evidence", "## Calculation", "## Assumptions and gaps", and "## Confidence". Identify source evidence and state that confidence means evidence coverage, not a calibrated probability.' : 'Keep the response concise and tell the user to review any proposal before acting.'} ${SPECIALIST_AGENT_UNTRUSTED_DATA_POLICY}`,
           messages: [
             {
               role: 'user',
-              content: `Explain these calculated additional reorder suggestions for human review. State that the base quantity uses a trailing ${REORDER_VELOCITY_WINDOW_DAYS}-day sales window and this business's configured ${groups[0]?.items[0]?.baselineLeadTimeDays ?? REORDER_LEAD_TIME_DAYS}-day baseline, treats pending/approved outbound transfers as commitments, and subtracts unreceived eligible purchase orders plus approved/shipped inbound transfers mapped to one active destination product by SKU. Pending inbound transfers, unmapped SKU matches and draft procurement requests are excluded. Where a product has a configured purchase pack, the remaining stock-unit quantity is rounded up to a whole purchase unit. ${specialistAgentUntrustedData('Inventory evidence', evidence)}`,
+              content: questionMode
+                ? `${specialistAgentUntrustedData('Inventory user question', question)} Answer from this saved review evidence only. ${specialistAgentUntrustedData('Inventory review evidence', questionEvidence ?? {})} ${specialistAgentUntrustedData('Calculated reorder evidence', evidence)}`
+                : `Explain these calculated additional reorder suggestions for human review. State that the base quantity uses a trailing ${REORDER_VELOCITY_WINDOW_DAYS}-day sales window and this business's configured ${groups[0]?.items[0]?.baselineLeadTimeDays ?? REORDER_LEAD_TIME_DAYS}-day baseline, treats pending/approved outbound transfers as commitments, and subtracts unreceived eligible purchase orders plus approved/shipped inbound transfers mapped to one active destination product by SKU. Pending inbound transfers, unmapped SKU matches and draft procurement requests are excluded. Where a product has a configured purchase pack, the remaining stock-unit quantity is rounded up to a whole purchase unit. ${specialistAgentUntrustedData('Inventory evidence', evidence)}`,
             },
           ],
           temperature: 0,
-          maxTokens: 240,
+          maxTokens: questionMode ? 800 : 240,
         },
-        [{ tool: 'read_reorder_suggestions', itemCount }],
+        [
+          {
+            tool: questionMode
+              ? 'read_saved_inventory_review_evidence'
+              : 'read_reorder_suggestions',
+            itemCount: questionMode
+              ? Array.isArray(questionEvidence?.findings)
+                ? questionEvidence.findings.length
+                : 0
+              : itemCount,
+          },
+        ],
         undefined,
         specialistAgentRunId,
+      );
+      await this.agentPolicy.assertSourceModulesEnabledForBusiness(
+        businessId,
+        sourceModuleKeys,
       );
       const text = response.content
         .filter((block) => block.type === 'text')
         .map((block) => block.text)
         .join('\n')
         .trim()
-        .slice(0, 1600);
+        .slice(0, questionMode ? 5_000 : 1_600);
+      const questionAnswer =
+        questionMode && hasRequiredSpecialistAgentAnswerSections(text);
       return {
-        status: text ? 'ready' : 'unavailable',
-        text: text || null,
-        message: text ? null : 'The AI provider returned no explanation.',
+        mode: questionMode ? 'question' : 'review',
+        status: text && (!questionMode || questionAnswer) ? 'ready' : 'unavailable',
+        text: text && (!questionMode || questionAnswer) ? text : null,
+        message: text && questionMode && !questionAnswer
+          ? 'The AI response did not include the required Answer, Evidence, Calculation, Assumptions and gaps, and Confidence sections.'
+          : text
+            ? null
+            : 'The AI provider returned no explanation.',
         inputTokens: response.inputTokens,
         outputTokens: response.outputTokens,
       };
     } catch (error) {
-      return describeAiSummaryProviderFailure(
-        error,
-        'The calculated evidence is still available.',
-      );
+      if (isSpecialistSourceModuleDisabledError(error)) throw error;
+      return {
+        ...describeAiSummaryProviderFailure(
+          error,
+          'The calculated evidence is still available.',
+        ),
+        mode: question ? 'question' : 'review',
+      };
     }
   }
 
-  private deterministicSummary(counts: {
-    demandForecast: number;
-    demandHistoryUnavailable: number;
-    inventoryValuation: number;
-    reorder: number;
-    stockThreshold: number;
-    overstock: number;
-    countVariance: number;
-    recentWastage: number;
-    backInStockReview: number;
-    branchRebalance: number;
-    repeatedCountVariance: number;
-  }): string {
+  private deterministicSummary(
+    counts: {
+      demandForecast: number;
+      demandHistoryUnavailable: number;
+      inventoryValuation: number;
+      reorder: number;
+      stockThreshold: number;
+      overstock: number;
+      countVariance: number;
+      recentWastage: number;
+      backInStockReview: number;
+      branchRebalance: number;
+      repeatedCountVariance: number;
+    },
+    modules: { customersEnabled: boolean; branchesEnabled: boolean },
+  ): string {
     const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    const waitlistSummary = modules.customersEnabled
+      ? `${counts.backInStockReview} back-in-stock waitlist review(s)`
+      : 'back-in-stock waitlist data not evaluated because Customers is disabled';
+    const branchSummary = modules.branchesEnabled
+      ? `${counts.branchRebalance} branch rebalance review(s)`
+      : 'branch rebalance data not evaluated because Branches is disabled';
     return total > 0
-      ? `Saved ${total} read-only Inventory finding(s): ${counts.demandForecast} historical demand baseline(s), ${counts.demandHistoryUnavailable} low-stock item(s) without a usable recent demand baseline, ${counts.inventoryValuation} canonical inventory valuation snapshot(s), ${counts.reorder} reorder, ${counts.stockThreshold} at/below low-stock threshold, ${counts.overstock} existing overstock flag(s), ${counts.countVariance} draft count variance(s), ${counts.repeatedCountVariance} repeated applied-count adjustment pattern(s), ${counts.recentWastage} product(s) with recorded wastage, ${counts.backInStockReview} back-in-stock waitlist review(s), and ${counts.branchRebalance} branch rebalance review(s). No stock or purchase order was changed and no customer was notified.`
-      : 'No recorded demand baseline, canonical inventory valuation, reorder, stock-threshold, existing overstock, draft count-variance, repeated applied-count adjustment, recent recorded-wastage, back-in-stock waitlist, or branch rebalance findings were returned by the canonical Inventory services. No stock or purchase order was changed and no customer was notified.';
+      ? `Saved ${total} read-only Inventory finding(s): ${counts.demandForecast} historical demand baseline(s), ${counts.demandHistoryUnavailable} low-stock item(s) without a usable recent demand baseline, ${counts.inventoryValuation} canonical inventory valuation snapshot(s), ${counts.reorder} reorder, ${counts.stockThreshold} at/below low-stock threshold, ${counts.overstock} existing overstock flag(s), ${counts.countVariance} draft count variance(s), ${counts.repeatedCountVariance} repeated applied-count adjustment pattern(s), ${counts.recentWastage} product(s) with recorded wastage, ${waitlistSummary}, and ${branchSummary}. No stock or purchase order was changed and no customer was notified.`
+      : `No recorded demand baseline, canonical inventory valuation, reorder, stock-threshold, existing overstock, draft count-variance, repeated applied-count adjustment, or recent recorded-wastage findings were returned by the canonical Inventory services; ${waitlistSummary}; ${branchSummary}. No stock or purchase order was changed and no customer was notified.`;
   }
 
   private async buildRepeatedStockCountRecommendations(
@@ -4245,7 +4898,7 @@ export class InventoryIntelligenceService {
     branches?: Array<{ id: string; name: string }>,
   ): Promise<{
     recommendations: AgentDraftRecommendation[];
-    availability: 'available' | 'single_location';
+    availability: 'available' | 'single_location' | 'module_disabled';
     activeLocationCount: number;
   }> {
     const scopedBranches =

@@ -140,7 +140,7 @@ describe('FinanceAgentReturnEventProcessor (MySQL)', () => {
           data: {
             businessId,
             agentKey: 'financial_intelligence',
-            agentVersion: '1.0.0',
+            agentVersion: '1.1.0',
             moduleId: '30',
             triggerType: options.triggerType,
             status: 'completed',

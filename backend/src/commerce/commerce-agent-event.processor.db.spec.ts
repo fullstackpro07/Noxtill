@@ -220,7 +220,7 @@ describe('CommerceAgentEventProcessor (MySQL)', () => {
           data: {
             businessId,
             agentKey: 'autonomous_commerce',
-            agentVersion: '1.0.0',
+            agentVersion: '1.1.0',
             moduleId: '29',
             triggerType: options.triggerType,
             status: 'completed',

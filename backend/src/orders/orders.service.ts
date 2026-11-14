@@ -39,6 +39,7 @@ import { enforceCreditLimit, enforceSaleRules } from './order-policy.util';
 import { excludeErasedCustomers } from '../customers/segment-rules.util';
 import {
   CUSTOMER_ORDER_COMPLETED_EVENT_JOB,
+  CUSTOMER_ORDER_CANCELLED_EVENT_JOB,
   FINANCE_ORDER_COMPLETED_EVENT_JOB,
   SPECIALIST_AGENT_FINANCE_EVENTS_QUEUE,
   SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
@@ -983,6 +984,9 @@ export class OrdersService {
     });
 
     await this.queueCompletedOrderFinanceReview(updated);
+    if (updated.status === OrderStatus.cancelled) {
+      await this.queueCancelledOrderCustomerReview(updated);
+    }
 
     if (updated.customerId) {
       await this.sendGate
@@ -996,6 +1000,56 @@ export class OrdersService {
     }
 
     return updated;
+  }
+
+  private async queueCancelledOrderCustomerReview(order: {
+    id: string;
+    businessId: string;
+    customerId: string | null;
+    updatedAt: Date;
+  }): Promise<void> {
+    if (!this.customerAgentEvents || !order.customerId) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: order.businessId },
+        select: { id: true, policies: true },
+      });
+      const policies = this.policies.resolve(business);
+      if (
+        !policies.bool('agents.customerEnabled') ||
+        !policies.bool('agents.customerCancelledOrderEventReviewEnabled')
+      ) {
+        return;
+      }
+
+      const occurredAt = order.updatedAt.toISOString();
+      const eventId = `order-cancelled:${order.id}:${occurredAt}`;
+      await this.customerAgentEvents.add(
+        CUSTOMER_ORDER_CANCELLED_EVENT_JOB,
+        {
+          businessId: order.businessId,
+          orderId: order.id,
+          cancelledAt: occurredAt,
+          eventId,
+          sourceModule: 'orders',
+          entityVersion: occurredAt,
+          schemaVersion: 1,
+          correlationId: eventId,
+        },
+        {
+          jobId: `customer-order-cancelled-review-${order.businessId}-${order.id}-${order.updatedAt.getTime()}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      // Optional analysis must never turn a successful cancellation into a failed request.
+      this.logger.warn(
+        `Could not queue Customer review for cancelled order ${order.id}: ${(error as Error).message}`,
+      );
+    }
   }
 
   /**

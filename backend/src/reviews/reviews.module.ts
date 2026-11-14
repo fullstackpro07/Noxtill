@@ -28,6 +28,7 @@ import { ReviewPlatformDestinationsService } from './review-platform-destination
 import { MessagingModule } from '../messaging/messaging.module';
 import { AiModule } from '../ai/ai.module';
 import { ActivityModule } from '../activity/activity.module';
+import { SpecialistAgentEventQueueModule } from '../common/agents/specialist-agent-event-queue.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ActivityModule } from '../activity/activity.module';
     MessagingModule,
     AiModule,
     ActivityModule,
+    SpecialistAgentEventQueueModule,
   ],
   controllers: [
     ReviewsController,

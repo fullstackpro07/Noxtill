@@ -44,6 +44,7 @@ import {
   classifyUrgency,
   type Urgency,
 } from "@/components/inventory/inventory-classification";
+import { useDisabledModules } from "@/components/layout/module-gate";
 import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { askText } from "@/lib/ask-dialog";
@@ -58,11 +59,13 @@ const URGENCY_TONE: Record<Urgency, Tone> = {
 export function ReorderSuggestionsView() {
   const session = useSession();
   const currency = session.business.currency;
+  const disabledModules = useDisabledModules();
   const canRunAgent =
     session.user.role === "owner" || session.user.role === "manager";
   const [supplier, setSupplier] = useState("all");
   const [urgency, setUrgency] = useState<Urgency | "all">("all");
   const [category, setCategory] = useState("all");
+  const [inventoryQuestion, setInventoryQuestion] = useState("");
   const [decisions, setDecisions] = useState<
     Record<string, "accepted" | "dismissed">
   >({});
@@ -104,6 +107,7 @@ export function ReorderSuggestionsView() {
   } = useQuery({
     queryKey: ["inventory-agent-outcomes"],
     queryFn: fetchInventoryAgentActionOutcomes,
+    enabled: !disabledModules.has("procurement"),
   });
   const {
     data: branchTransferOutcomes = [],
@@ -112,6 +116,7 @@ export function ReorderSuggestionsView() {
   } = useQuery({
     queryKey: ["inventory-agent-branch-transfer-outcomes"],
     queryFn: fetchInventoryAgentBranchTransferOutcomes,
+    enabled: !disabledModules.has("branches"),
   });
   const agentMutation = useMutation({
     mutationFn: runInventoryAgent,
@@ -578,6 +583,77 @@ export function ReorderSuggestionsView() {
             </span>
           )}
         </div>
+        {canRunAgent && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "end",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <label
+              style={{
+                flex: 1,
+                minWidth: 240,
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#344054",
+              }}
+            >
+              Ask about saved Inventory findings
+              <textarea
+                value={inventoryQuestion}
+                onChange={(event) => setInventoryQuestion(event.target.value)}
+                maxLength={1000}
+                rows={2}
+                placeholder="For example: Which reorder suggestions have the most incoming supply?"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  marginTop: 5,
+                  padding: 9,
+                  borderRadius: 8,
+                  border: `1px solid ${INV.border}`,
+                  background: "#fff",
+                  color: "#101828",
+                  font: "inherit",
+                  fontWeight: 400,
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => agentMutation.mutate(inventoryQuestion.trim())}
+              disabled={
+                agentMutation.isPending || inventoryQuestion.trim().length < 4
+              }
+              style={{
+                ...outlineBtnStyle,
+                opacity:
+                  agentMutation.isPending || inventoryQuestion.trim().length < 4
+                    ? 0.55
+                    : 1,
+              }}
+            >
+              Ask Inventory Agent
+            </button>
+            <p
+              style={{
+                width: "100%",
+                margin: 0,
+                fontSize: 10.5,
+                color: "#667085",
+              }}
+            >
+              The question is sent to the configured AI provider; Noxtill stores
+              only its hash. Answers use the current review&rsquo;s saved
+              calculations and selected evidence fields. Record IDs and
+              inventory cost values are excluded from the AI context.
+            </p>
+          </div>
+        )}
         {agentRunsPending ? (
           <div style={{ fontSize: 12, color: "#667085" }}>
             Loading saved agent runs…
@@ -617,6 +693,14 @@ export function ReorderSuggestionsView() {
             >
               {latestAgentRun.output.summary}
             </p>
+            {latestAgentRun.output.message ? (
+              <p
+                role="status"
+                style={{ margin: 0, fontSize: 11.5, color: "#667085" }}
+              >
+                {latestAgentRun.output.message}
+              </p>
+            ) : null}
             {latestAgentRun.output.signalCounts ? (
               <div style={{ fontSize: 10.5, color: "#667085" }}>
                 Historical demand baselines{" "}
@@ -635,9 +719,14 @@ export function ReorderSuggestionsView() {
                 · Products with recorded wastage{" "}
                 {latestAgentRun.output.signalCounts.recentWastage} ·
                 Back-in-stock reviews{" "}
-                {latestAgentRun.output.signalCounts.backInStockReview ?? 0} ·
+                {latestAgentRun.output.moduleSources?.customers === "disabled"
+                  ? "not evaluated"
+                  : (latestAgentRun.output.signalCounts.backInStockReview ??
+                    0)}{" "}·
                 Branch rebalance reviews{" "}
-                {latestAgentRun.output.signalCounts.branchRebalance ?? 0}
+                {latestAgentRun.output.moduleSources?.branches === "disabled"
+                  ? "not evaluated"
+                  : (latestAgentRun.output.signalCounts.branchRebalance ?? 0)}
               </div>
             ) : null}
             {latestAgentRun.output.inventoryValuation ? (
@@ -682,11 +771,28 @@ export function ReorderSuggestionsView() {
                 </span>
               </div>
             ) : null}
+            {latestAgentRun.output.moduleSources?.purchasing === "included" ||
+            latestAgentRun.output.moduleSources?.customers === "disabled" ? (
+              <div role="status" style={{ fontSize: 11.5, color: "#667085" }}>
+                {latestAgentRun.output.moduleSources?.purchasing === "included"
+                  ? "Open purchase orders and confirmed supplier terms are included from Inventory. "
+                  : ""}
+                {latestAgentRun.output.moduleSources?.customers === "disabled"
+                  ? "Back-in-stock waitlist data was not included because Customers is disabled."
+                  : ""}
+              </div>
+            ) : null}
             {latestAgentRun.output.branchRebalanceAvailability ===
             "single_location" ? (
               <div role="status" style={{ fontSize: 11.5, color: "#667085" }}>
                 Branch comparison is not available until this business has
                 another active location.
+              </div>
+            ) : latestAgentRun.output.branchRebalanceAvailability ===
+              "module_disabled" ? (
+              <div role="status" style={{ fontSize: 11.5, color: "#667085" }}>
+                Branch comparison is unavailable because the Branches module is
+                disabled for this business.
               </div>
             ) : latestAgentRun.output.branchRebalanceAvailability ===
               "available" ? (
@@ -708,8 +814,12 @@ export function ReorderSuggestionsView() {
                   lineHeight: 1.55,
                 }}
               >
-                <strong>AI-generated review note</strong>
-                <p style={{ margin: "5px 0 0" }}>
+                <strong>
+                  {latestAgentRun.output.aiSummary.mode === "question"
+                    ? "Inventory Agent answer"
+                    : "AI-generated review note"}
+                </strong>
+                <p style={{ margin: "5px 0 0", whiteSpace: "pre-wrap" }}>
                   {latestAgentRun.output.aiSummary.text}
                 </p>
                 <span
@@ -1523,7 +1633,11 @@ export function ReorderSuggestionsView() {
               after full receipt.
             </p>
           </div>
-          {agentOutcomesPending ? (
+          {disabledModules.has("procurement") ? (
+            <div role="status" style={{ fontSize: 11.5, color: "#667085" }}>
+              Procurement follow-through is unavailable because the Procurement module is disabled for this business.
+            </div>
+          ) : agentOutcomesPending ? (
             <div style={{ fontSize: 11.5, color: "#667085" }}>
               Loading recorded follow-through…
             </div>
@@ -1933,7 +2047,11 @@ export function ReorderSuggestionsView() {
             Transfers.
           </p>
         </div>
-        {branchTransferOutcomesPending ? (
+        {disabledModules.has("branches") ? (
+          <div role="status" style={{ fontSize: 11.5, color: "#667085" }}>
+            Branch transfer follow-through is unavailable because the Branches module is disabled for this business.
+          </div>
+        ) : branchTransferOutcomesPending ? (
           <div style={{ fontSize: 11.5, color: "#667085" }}>
             Loading branch transfer records…
           </div>

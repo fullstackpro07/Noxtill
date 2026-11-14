@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { AuditService } from '../common/audit/audit.service';
 import { AppException } from '../common/filters/app.exception';
@@ -153,11 +154,33 @@ export class CustomersService {
         );
       }
 
+      // Selected-customer AI questions keep only a hash of the selected CRM ID in
+      // run inputRefs. Find those runs inside the same transaction so erasure can
+      // redact their saved answers and remove their tool/evidence references too.
+      const selectedCustomerRefHash = createHash('sha256')
+        .update(id)
+        .digest('hex');
+      const selectedCustomerRuns = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id
+        FROM specialist_agent_runs
+        WHERE business_id = ${customer.businessId}
+          AND agent_key = 'customer'
+          AND JSON_CONTAINS(
+            input_refs,
+            JSON_OBJECT('selectedCustomerRefSha256', ${selectedCustomerRefHash})
+          ) = 1
+        FOR UPDATE
+      `;
+      const selectedCustomerRunIds = selectedCustomerRuns.map(({ id }) => id);
+
       const [
         deletedTasks,
         deletedDrafts,
         deletedMemoryNotes,
         deletedChannelConsents,
+        redactedSpecialistRuns,
+        deletedSpecialistEvidence,
+        deletedSpecialistToolCalls,
       ] = await Promise.all([
         tx.customerFollowUpTask.deleteMany({
           where: { businessId: customer.businessId, customerId: id },
@@ -179,6 +202,50 @@ export class CustomersService {
         tx.customerChannelConsent.deleteMany({
           where: { businessId: customer.businessId, customerId: id },
         }),
+        selectedCustomerRunIds.length > 0
+          ? tx.specialistAgentRun.updateMany({
+              where: {
+                id: { in: selectedCustomerRunIds },
+                businessId: customer.businessId,
+                agentKey: 'customer',
+              },
+              data: {
+                inputRefs: [
+                  {
+                    source: 'customer_agent_read_only_question',
+                    scope: 'selected_customer',
+                    questionStored: false,
+                    selectedCustomerErased: true,
+                  },
+                ],
+                output: {
+                  answer: null,
+                  answerStatus: 'erased',
+                  message:
+                    'This answer was removed after the selected customer profile was erased.',
+                  tools: [],
+                  coverage: 'redacted_after_customer_erasure',
+                },
+                errorMessage: null,
+              },
+            })
+          : Promise.resolve({ count: 0 }),
+        selectedCustomerRunIds.length > 0
+          ? tx.specialistAgentEvidence.deleteMany({
+              where: {
+                businessId: customer.businessId,
+                runId: { in: selectedCustomerRunIds },
+              },
+            })
+          : Promise.resolve({ count: 0 }),
+        selectedCustomerRunIds.length > 0
+          ? tx.specialistAgentToolCall.deleteMany({
+              where: {
+                businessId: customer.businessId,
+                runId: { in: selectedCustomerRunIds },
+              },
+            })
+          : Promise.resolve({ count: 0 }),
       ]);
       const erased = await tx.customer.update({
         where: { id, businessId: customer.businessId },
@@ -201,6 +268,9 @@ export class CustomersService {
         deletedDrafts: deletedDrafts.count,
         deletedMemoryNotes: deletedMemoryNotes.count,
         deletedChannelConsents: deletedChannelConsents.count,
+        redactedSpecialistRuns: redactedSpecialistRuns.count,
+        deletedSpecialistEvidence: deletedSpecialistEvidence.count,
+        deletedSpecialistToolCalls: deletedSpecialistToolCalls.count,
       };
     });
 
@@ -227,6 +297,9 @@ export class CustomersService {
         deletedFollowUpTasks: result.deletedTasks,
         deletedCustomerMemoryNotes: result.deletedMemoryNotes,
         deletedCustomerChannelConsents: result.deletedChannelConsents,
+        redactedCustomerAgentRuns: result.redactedSpecialistRuns,
+        deletedCustomerAgentEvidence: result.deletedSpecialistEvidence,
+        deletedCustomerAgentToolCalls: result.deletedSpecialistToolCalls,
       },
     });
 

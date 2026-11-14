@@ -17,6 +17,7 @@ import { REORDER_VELOCITY_WINDOW_DAYS } from './reorder-suggestions.constants';
 import { ProductKind, StockMovementKind } from '@prisma/client';
 import {
   INVENTORY_WASTAGE_RECORDED_EVENT_JOB,
+  INVENTORY_PURCHASE_MOVEMENT_RECORDED_EVENT_JOB,
   SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE,
 } from '../common/agents/specialist-agent-events.constants';
 import { resolvePolicies } from '../common/policies/policies.service';
@@ -70,7 +71,51 @@ export class InventoryService {
       entityId: movement.id,
     });
 
+    await this.queuePurchaseMovementReview(
+      movement.businessId,
+      movement.id,
+      movement.createdAt,
+    );
+
     return movement;
+  }
+
+  private async queuePurchaseMovementReview(
+    businessId: string,
+    stockMovementId: string,
+    occurredAt: Date,
+  ): Promise<void> {
+    if (!this.specialistAgentEvents) return;
+    try {
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      if (
+        !business ||
+        !resolvePolicies(business).bool(
+          'agents.inventoryPurchaseMovementEventReviewEnabled',
+        )
+      ) {
+        return;
+      }
+
+      await this.specialistAgentEvents.add(
+        INVENTORY_PURCHASE_MOVEMENT_RECORDED_EVENT_JOB,
+        { businessId, stockMovementId, occurredAt: occurredAt.toISOString() },
+        {
+          jobId: `inventory-purchase-movement-${businessId}-${stockMovementId}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 200,
+          removeOnFail: 500,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Inventory review for purchase movement ${stockMovementId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   private async queueWastageReview(

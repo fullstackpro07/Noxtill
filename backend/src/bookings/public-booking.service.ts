@@ -1,5 +1,13 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { randomBytes } from 'crypto';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { SendGateService } from '../messaging/send-gate.service';
@@ -25,6 +33,10 @@ import {
 } from './booking-policy.util';
 import { assertPhoneBookingSlot } from './phone-booking-policy.util';
 import {
+  CUSTOMER_APPOINTMENT_RESCHEDULED_EVENT_JOB,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
+import {
   AppointmentSource,
   AppointmentStatus,
   ProductKind,
@@ -42,10 +54,15 @@ const RESCHEDULE_TOKEN_BYTES = 16;
  */
 @Injectable()
 export class PublicBookingService {
+  private readonly logger = new Logger(PublicBookingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
     private readonly waitlist: WaitlistService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly customerAgentEvents?: Queue,
   ) {}
 
   private async resolveBusiness(slug: string) {
@@ -373,7 +390,7 @@ export class PublicBookingService {
     if (options?.phone)
       assertPhoneBookingSlot(business, newStart, durationMs / 60_000);
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await assertSlotAvailable(tx, {
         businessId: appointment.businessId,
         staffId: appointment.staffUserId,
@@ -478,6 +495,37 @@ export class PublicBookingService {
         },
       });
     });
+
+    if (
+      appointment.customerId &&
+      appointment.startsAt.getTime() !== updated.startsAt.getTime() &&
+      this.customerAgentEvents &&
+      policies.bool('agents.customerEnabled') &&
+      policies.bool('agents.customerAppointmentRescheduledEventReviewEnabled')
+    ) {
+      try {
+        await this.customerAgentEvents.add(
+          CUSTOMER_APPOINTMENT_RESCHEDULED_EVENT_JOB,
+          {
+            businessId: appointment.businessId,
+            appointmentId: updated.id,
+            rescheduledAt: updated.updatedAt.toISOString(),
+          },
+          {
+            jobId: `customer-appointment-rescheduled-${appointment.businessId}-${updated.id}-${updated.updatedAt.getTime()}`,
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 1_000 },
+            removeOnComplete: 1_000,
+            removeOnFail: false,
+          },
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Could not queue Customer review for public rescheduled appointment ${updated.id}: ${(error as Error).message}`,
+        );
+      }
+    }
+    return updated;
   }
 
   async cancel(token: string) {

@@ -3006,3 +3006,16 @@ returned HTTP 200; the browser's isolated page context did not expose Performanc
 per-request network status was not directly inspected. No migration, provider call, commit or push.
 This adds one bounded Commerce review path; it does not complete or production-accept the five
 specialist agents.
+
+## Five Specialized AI Agents — source module selection for Customer review (2026-11-12)
+
+Customer Agent review now skips Reviews queries when the Reviews module is disabled, and skips
+Appointments and canonical Message/follow-up delivery reads when Bookings or Unified Inbox is
+disabled. The saved review labels omitted module data rather than treating it as zero. Shared
+Analytics callers retain their existing default behavior. Tests, type checks, lint and browser QA
+were not run because the user asked for code work only.
+
+The Customer Agent analytics question tool also now selects only customer counts, the existing
+retention fields and permitted review aggregates; its query skips lifetime-spend fields and spend
+calculations. Customer Agent history hides old saved results and evidence when Reviews, Bookings or
+Unified Inbox is currently disabled. These code changes are untested by request.

@@ -1185,7 +1185,7 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
           title: 'Specialist AI event reviews',
           hint: 'Optional · read-only · source-event driven',
           footer:
-            'When enabled, completed or partial site audits queue one SEO workspace review; canonical low-stock scans, applied physical stock counts, fully received purchase orders and confirmed branch-transfer receipts can each queue one Inventory review per eligible branch, while recorded wastage can queue a read-only Inventory review for its business; newly-lapsed customer events and customer-linked completed sales queue at most one aggregate Customer review per business per UTC day, while customer no-shows and cancellations queue privacy-minimized Customer reviews. Product Validation, current supplier-quote and failed-delivery events queue a Commerce review, and newly saved expenses queue a Finance review. Reviews are read-only and do not request AI explanations or apply changes. Commerce reviews also require Commerce autonomy to be enabled.',
+            'When enabled, completed or partial site audits queue one SEO workspace review; canonical low-stock scans, applied physical stock counts, fully received purchase orders, direct purchase movements and confirmed branch-transfer receipts can each queue one Inventory review per source event and eligible business, while recorded wastage can queue a read-only Inventory review for its business; newly-lapsed customer events and customer-linked completed sales queue at most one aggregate Customer review per business per UTC day, while customer no-shows, cancellations, reschedules, completed appointments, cancelled orders, submitted ratings, provider-confirmed follow-up deliveries and approved returns queue Customer reviews. Product Validation, completed production work orders, current supplier-quote and failed-delivery events queue a Commerce review, and newly saved expenses queue a Finance review. Reviews are read-only and do not request AI explanations or apply changes. Commerce reviews also require Commerce autonomy to be enabled.',
           rows: [
             policyRow(d, {
               key: 'specialist-agent-seo-audit-event-review',
@@ -1278,6 +1278,21 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               off: { text: 'Manual only', tone: 'neutral' },
             }),
             policyRow(d, {
+              key: 'specialist-agent-inventory-purchase-movement-event-review',
+              policy: 'agents.inventoryPurchaseMovementEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review inventory after direct purchases',
+              description:
+                'Start one read-only Inventory review after a direct inventory purchase movement is recorded. Duplicate delivery of the same movement does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Inventory',
+                href: '/inventory/reorder-suggestions',
+              },
+              on: { text: 'Purchase review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
               key: 'specialist-agent-customer-lapsed-event-review',
               policy: 'agents.customerLapsedEventReviewEnabled',
               kind: 'toggle',
@@ -1332,6 +1347,30 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               off: { text: 'Manual only', tone: 'neutral' },
             }),
             policyRow(d, {
+              key: 'specialist-agent-customer-appointment-completed-event-review',
+              policy: 'agents.customerAppointmentCompletedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer context after completed appointments',
+              description:
+                'Queue one aggregate, read-only Customer review per business per UTC day when an appointment is completed. It does not infer a reason, draft a message, or contact the customer.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customers', href: '/customers' },
+              on: { text: 'Completion review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-appointment-rescheduled-event-review',
+              policy: 'agents.customerAppointmentRescheduledEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer context after appointment reschedules',
+              description:
+                'Queue one aggregate, read-only Customer review per business per UTC day after staff or customer self-service changes an appointment time or staff assignment. The appointment must still be active and match the saved update version; no reason is inferred and no customer is contacted.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customers', href: '/customers' },
+              on: { text: 'Reschedule review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
               key: 'specialist-agent-customer-completed-sale-event-review',
               policy: 'agents.customerCompletedSaleEventReviewEnabled',
               kind: 'toggle',
@@ -1341,6 +1380,58 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               requires: CAPABILITIES.AI_SETTINGS_MANAGE,
               link: { label: 'Open Customer Intelligence', href: '/customers' },
               on: { text: 'Sale review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-cancelled-order-event-review',
+              policy: 'agents.customerCancelledOrderEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer context after cancelled orders',
+              description:
+                'Queue one read-only Customer review after a customer-linked order is cancelled. The worker checks the current order version and never includes the cancellation reason or contacts the customer.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customer Intelligence', href: '/customers' },
+              on: { text: 'Cancellation review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-review-received-event-review',
+              policy: 'agents.customerReviewReceivedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer feedback after ratings',
+              description:
+                'Queue a read-only aggregate Customer review after a customer-linked Noxtill rating is submitted. Review text and customer identity are not sent to the agent, and no customer is contacted.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customer Intelligence', href: '/customers' },
+              on: { text: 'Rating review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-message-delivery-confirmed-event-review',
+              policy:
+                'agents.customerMessageDeliveryConfirmedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review follow-ups after confirmed delivery',
+              description:
+                'Queue one read-only aggregate Customer review when a messaging provider confirms delivery or read status for a Customer Agent follow-up draft. Campaign messages are not included; the agent receives no message content or contact details and never sends another follow-up.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: { label: 'Open Customer Intelligence', href: '/customers' },
+              on: { text: 'Delivery review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-customer-return-approved-event-review',
+              policy: 'agents.customerReturnApprovedEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review customer context after approved returns',
+              description:
+                'Start one read-only Customer Agent review after a canonical return is approved. The worker excludes erased customers and confirms the saved return version before starting.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Customer Intelligence',
+                href: '/customers',
+              },
+              on: { text: 'Return review on', tone: 'green' },
               off: { text: 'Manual only', tone: 'neutral' },
             }),
             policyRow(d, {
@@ -1416,6 +1507,21 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
                 href: '/autonomous-commerce/reconciliation',
               },
               on: { text: 'Listing review on', tone: 'green' },
+              off: { text: 'Manual only', tone: 'neutral' },
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-commerce-production-event-review',
+              policy: 'agents.commerceProductionEventReviewEnabled',
+              kind: 'toggle',
+              label: 'Review completed production work orders',
+              description:
+                'Start one read-only Commerce review after a production work order is completed or released from quality hold. The review is pinned to the saved work-order version and duplicate event delivery does not create another run.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              link: {
+                label: 'Open Production & Assembly',
+                href: '/autonomous-commerce/production',
+              },
+              on: { text: 'Production review on', tone: 'green' },
               off: { text: 'Manual only', tone: 'neutral' },
             }),
             policyRow(d, {
@@ -1956,10 +2062,10 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
           ],
         },
         {
-          title: 'Specialist action budget',
-          hint: 'Server-enforced · per specialist run · all five agents',
+          title: 'Specialist action controls',
+          hint: 'Server-enforced · shared by all five agents',
           footer:
-            'Counts material action proposals created by a run. Repeated or concurrent proposals cannot exceed the limit. This does not execute an approved action; each canonical module still owns execution and verification.',
+            'The action cap counts proposals per run. Approval expiry is fixed when a proposal enters the approval queue; changing the setting does not extend an existing deadline. Canonical modules still own execution and verification.',
           rows: [
             policyRow(d, {
               key: 'specialist-agent-actions-per-run',
@@ -1973,6 +2079,42 @@ export function intelligenceCategories(d: HubDeps): CategoryDef[] {
               unit: 'actions / run',
               format: (value) =>
                 `${value} action${value === 1 ? '' : 's'} / run`,
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-action-approval-expiry',
+              policy: 'agents.specialistActionApprovalTtlDays',
+              kind: 'number',
+              label: 'Expire pending specialist approvals after',
+              description:
+                'New specialist actions waiting for approval expire after this many days. Expired actions cannot be approved or executed; the owner must refresh the proposal and submit it for review again.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'days',
+              format: (value) => `${value} day${value === 1 ? '' : 's'}`,
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-action-stale-execution',
+              policy: 'agents.specialistActionStaleExecutionMinutes',
+              kind: 'number',
+              label: 'Move unresolved specialist actions to review after',
+              description:
+                'If a canonical action remains in progress this long, move it to Needs review and record that the outcome is unknown. No action is retried automatically; reconcile the canonical resource before deciding what to do next.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'minutes',
+              format: (value) => `${value} minutes`,
+            }),
+            policyRow(d, {
+              key: 'specialist-agent-action-stale-verification',
+              policy: 'agents.specialistActionStaleVerificationMinutes',
+              kind: 'number',
+              label: 'Move unverified specialist actions to review after',
+              description:
+                'If a canonical action stays in verification for this long, move it to Needs review. This does not claim verification or retry the action; review the canonical resource before deciding what to do next.',
+              requires: CAPABILITIES.AI_SETTINGS_MANAGE,
+              risk: 'Medium',
+              unit: 'minutes',
+              format: (value) => `${value} minutes`,
             }),
           ],
         },

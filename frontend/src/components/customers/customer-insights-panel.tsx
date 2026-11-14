@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCustomers } from "@/lib/customers-api";
@@ -53,7 +54,7 @@ function CustomerIntelligenceAgentPanel() {
       ),
   });
   const askMutation = useMutation({
-    mutationFn: askCustomerAgent,
+    mutationFn: (value: string) => askCustomerAgent(value),
     onSuccess: async () => {
       setQuestion("");
       await queryClient.invalidateQueries({
@@ -247,18 +248,25 @@ function CustomerIntelligenceAgentPanel() {
                 {latest.output.answer}
               </p>
               {(latest.output.tools?.length ?? 0) > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {latest.output.tools?.map((tool, index) => (
-                    <span
+                    <div
                       key={`${tool.tool}:${index}`}
-                      className="rounded-full px-2 py-1 text-[10px]"
+                      className="rounded-lg border p-2"
                       style={{
                         color: "var(--app-text-muted)",
                         background: "var(--app-surface-2)",
+                        borderColor: "var(--app-border)",
                       }}
                     >
-                      {tool.tool} · {tool.outcome}
-                    </span>
+                      <p className="m-0 text-[10px] font-bold">{tool.tool} · {tool.outcome}</p>
+                      {tool.outcome === "succeeded" && <p className="mb-0 mt-1 text-[10px] leading-relaxed">{tool.summary}</p>}
+                      {tool.screen?.startsWith("/") && !tool.screen.startsWith("//") && (
+                        <Link href={tool.screen} className="mt-1 inline-block text-[10px] font-bold underline">
+                          Open source screen
+                        </Link>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -358,6 +366,20 @@ function CustomerIntelligenceAgentPanel() {
               </p>
             </div>
           )}
+          {snapshot?.customerFeedbackState === "module_disabled" && (
+            <p
+              role="status"
+              className="mb-0 mt-3 rounded-[10px] p-3 text-[11px]"
+              style={{
+                background: "var(--app-surface)",
+                border: "1px solid var(--app-border)",
+                color: "var(--app-text-muted)",
+              }}
+            >
+              Customer-linked review data: Not available because the Reviews
+              module is disabled. No review records were queried.
+            </p>
+          )}
           {snapshot?.customerJourneyContext && (
             <div
               role="status"
@@ -374,32 +396,71 @@ function CustomerIntelligenceAgentPanel() {
                 Bookings and support context · last{" "}
                 {snapshot.customerJourneyContext.windowDays} days
               </strong>
-              {snapshot.customerJourneyContext.state === "available" ? (
+              {snapshot.customerJourneyContext.state ===
+              "not_available_for_selected_branch" ? (
+                <p
+                  className="mb-0 mt-1 text-[11px]"
+                  style={{ color: "var(--app-text-muted)" }}
+                >
+                  {snapshot.customerJourneyContext.note}
+                </p>
+              ) : (
                 <>
                   <p
                     className="mb-0 mt-1 text-[11px]"
                     style={{ color: "var(--app-text-muted)" }}
                   >
-                    Booking statuses by start time:{" "}
-                    {Object.entries(
-                      snapshot.customerJourneyContext.appointmentStatusCounts,
-                    )
-                      .map(([status, count]) => `${status} ${count}`)
-                      .join(" · ") || "none recorded"}
-                    .{" "}
-                    {
-                      snapshot.customerJourneyContext
-                        .upcomingConfirmedAppointmentCount
-                    }{" "}
-                    booked or confirmed in the next 30 days. Support tickets by
-                    creation date:{" "}
-                    {Object.entries(
-                      snapshot.customerJourneyContext.supportTicketStatusCounts,
-                    )
-                      .map(([status, count]) => `${status} ${count}`)
-                      .join(" · ") || "none recorded"}
+                    {snapshot.customerJourneyContext.appointmentStatusCounts &&
+                    snapshot.customerJourneyContext
+                      .upcomingConfirmedAppointmentCount !== null ? (
+                      <>
+                        Booking statuses by start time:{" "}
+                        {Object.entries(
+                          snapshot.customerJourneyContext
+                            .appointmentStatusCounts,
+                        )
+                          .map(([status, count]) => `${status} ${count}`)
+                          .join(" · ") || "none recorded"}
+                        .{" "}
+                        {
+                          snapshot.customerJourneyContext
+                            .upcomingConfirmedAppointmentCount
+                        }{" "}
+                        booked or confirmed in the next 30 days. {" "}
+                      </>
+                    ) : (
+                      <>Bookings: Not available because the module is disabled. </>
+                    )}
+                    Support tickets by creation date:{" "}
+                    {snapshot.customerJourneyContext.supportTicketStatusCounts
+                      ? Object.entries(
+                          snapshot.customerJourneyContext
+                            .supportTicketStatusCounts,
+                        )
+                          .map(([status, count]) => `${status} ${count}`)
+                          .join(" · ") || "none recorded"
+                      : "Not available for this scope"}
                     . Current unresolved backlog:{" "}
-                    {snapshot.customerJourneyContext.openSupportTicketCount}.
+                    {snapshot.customerJourneyContext.openSupportTicketCount ??
+                      "Not available"}
+                    .{" "}
+                    {snapshot.customerJourneyContext.messageStatusByChannel ? (
+                      <>
+                        CRM-linked messages by channel/current status:{" "}
+                        {snapshot.customerJourneyContext.messageStatusByChannel
+                          .map(
+                            (item) =>
+                              item.channel +
+                              " " +
+                              item.status +
+                              " " +
+                              item.count,
+                          )
+                          .join(" · ") || "none recorded"}.
+                      </>
+                    ) : (
+                      <>Unified Inbox message context: Not available because the module is disabled.</>
+                    )}
                   </p>
                   <p
                     className="mb-0 mt-1 text-[10.5px]"
@@ -408,13 +469,6 @@ function CustomerIntelligenceAgentPanel() {
                     {snapshot.customerJourneyContext.note}
                   </p>
                 </>
-              ) : (
-                <p
-                  className="mb-0 mt-1 text-[11px]"
-                  style={{ color: "var(--app-text-muted)" }}
-                >
-                  {snapshot.customerJourneyContext.note}
-                </p>
               )}
             </div>
           )}

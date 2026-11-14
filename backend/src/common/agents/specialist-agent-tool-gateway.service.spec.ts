@@ -69,6 +69,18 @@ describe('SpecialistAgentToolGatewayService', () => {
       specialistAgentAction: { findFirst: findApproval },
     };
     return {
+      unscoped: {
+        business: {
+          findUnique: jest.fn().mockResolvedValue({ parentId: null }),
+        },
+        businessUser: {
+          findFirst: jest.fn().mockResolvedValue({
+            businessId: 'business-1',
+            role: 'owner',
+            customRoleId: null,
+          }),
+        },
+      },
       client: {
         ...tx,
         $transaction: async (

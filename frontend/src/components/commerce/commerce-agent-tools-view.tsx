@@ -1008,7 +1008,7 @@ export function CommerceAgentToolsView() {
               <span className="font-semibold">Latest review · {formatDate(specialistRuns.data[0].createdAt)} · {specialistRuns.data[0].status.replaceAll("_", " ")}</span>
               <span style={{ color: "var(--app-text-faint)" }}>AI: {specialistRuns.data[0].output.aiSummary?.status ?? "not available"}</span>
             </div>
-            <p className="mb-0 mt-2 text-sm">{specialistRuns.data[0].recommendations[0]?.summary ?? specialistRuns.data[0].output.summary ?? "No summary was saved."}</p>
+            <p className="mb-0 mt-2 text-sm">{specialistRuns.data[0].output.message ?? specialistRuns.data[0].recommendations[0]?.summary ?? specialistRuns.data[0].output.summary ?? "No summary was saved."}</p>
             {specialistRuns.data[0].output.reviewSteps && (
               <section className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--app-border)", background: "var(--app-surface-2)" }} aria-label="Commerce review source status">
                 <h3 className="m-0 text-xs font-bold">Review source status</h3>
@@ -1016,8 +1016,8 @@ export function CommerceAgentToolsView() {
                   {specialistRuns.data[0].output.reviewSteps.map((step) => (
                     <li key={step.key} className="flex flex-wrap items-center justify-between gap-2">
                       <span>{step.label}</span>
-                      <span style={{ color: step.status === "failed" ? "var(--app-danger-strong)" : "var(--app-text-muted)" }}>
-                        {step.status === "failed" ? `Not available · ${step.errorCode ?? "source error"}` : "Reviewed"}
+                      <span style={{ color: step.status === "failed" ? "var(--app-danger-strong)" : "var(--app-text-muted)" }} title={step.unavailableReason ?? undefined}>
+                        {step.status === "failed" ? `Not available · ${step.errorCode ?? "source error"}` : step.status === "skipped" ? `Not reviewed · ${step.unavailableReason ?? "source module disabled"}` : "Reviewed"}
                       </span>
                     </li>
                   ))}

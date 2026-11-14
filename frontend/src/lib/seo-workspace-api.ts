@@ -52,6 +52,30 @@ export interface SeoAgentRun {
       queueCounts: WorkspaceQueue["kpis"];
       newFindingWindowDays: number;
       completedWindowDays: number;
+      rankHistory?: {
+        source: "tracked_keyword_rank_snapshots";
+        trackedKeywordCount: number;
+        keywordsWithSnapshots: number;
+        staleKeywordCount: number;
+        improving: number;
+        declining: number;
+        unchanged: number;
+        notComparable: number;
+        latestCapturedAt: string | null;
+        observations: Array<{
+          keyword: string;
+          intent: string | null;
+          targetPageUrl: string | null;
+          latestRank: number | null;
+          latestStatus: "ranked" | "not_in_results" | "not_checked";
+          previousRank: number | null;
+          movement: "improving" | "declining" | "unchanged" | "not_comparable";
+          searchInterestIndex: number | null;
+          capturedAt: string | null;
+          freshness: "fresh" | "stale" | "missing";
+        }>;
+        truncated: boolean;
+      };
       offPageRecords?: {
         source: "merchant_entered_records";
         trackedLinks: number;
@@ -72,7 +96,12 @@ export interface SeoAgentRun {
         action: string;
       } | null;
     };
-    aiSummary?: { status: string; text: string | null; message: string | null };
+    aiSummary?: {
+      mode: "review" | "question";
+      status: string;
+      text: string | null;
+      message: string | null;
+    };
   } | null;
   recommendations: Array<{ id: string; title: string; summary: string; assumptions: string[]; missingData: string[] }>;
   aiCallLogs?: SpecialistAgentAiUsageCall[];
@@ -82,11 +111,12 @@ export const SEO_WORKSPACE_KEY = ["seo-workspace"] as const;
 export const fetchSeoWorkspace = () => apiFetch<WorkspaceQueue>("/seo-autopilot/workspace");
 export const fetchSeoWorkspaceHistory = () => apiFetch<WorkspaceDecision[]>("/seo-autopilot/workspace/history");
 export const fetchSeoAgentRuns = () => apiFetch<SeoAgentRun[]>("/seo-autopilot/workspace/agent-runs");
-export const runSeoAgentReview = () =>
-  postSpecialistAgentRun('seo', {}, (idempotencyKey) =>
+export const runSeoAgentReview = (question?: string) =>
+  postSpecialistAgentRun('seo', { question: question?.trim() || null }, (idempotencyKey) =>
     apiFetch<SeoAgentRun>("/seo-autopilot/workspace/agent-runs", {
       method: "POST",
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: question?.trim() ? JSON.stringify({ question: question.trim() }) : undefined,
     }),
   );
 export const generateSeoOpportunityBrief = (keywordId: string) =>

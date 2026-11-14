@@ -4,6 +4,7 @@ import { CLS_KEY_BUSINESS_ID } from '../common/tenancy/tenant.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { SpecialistAgentRunsService } from './specialist-agent-runs.service';
 import { SpecialistAgentRetentionService } from './specialist-agent-retention.service';
+import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
 
 jest.setTimeout(30_000);
 
@@ -35,6 +36,7 @@ describe('SpecialistAgentRetentionService (real MySQL)', () => {
     cls = new FakeClsService();
     runs = new SpecialistAgentRunsService(
       new TenantPrismaService(prisma, cls as unknown as ClsService),
+      new SpecialistAgentPolicyService(prisma, cls as unknown as ClsService),
     );
     const staleFixtures = await prisma.business.findMany({
       where: {

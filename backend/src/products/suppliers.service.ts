@@ -1,17 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { Queue } from 'bullmq';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { QuickPurchaseOrderDto } from './dto/quick-purchase-order.dto';
 import { Prisma } from '@prisma/client';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  INVENTORY_PURCHASE_MOVEMENT_RECORDED_EVENT_JOB,
+  SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 /** Suppliers (UPD-BE-014) — formalizes what was previously only a free-text field on StockMovement. */
 @Injectable()
 export class SuppliersService {
+  private readonly logger = new Logger(SuppliersService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly activity: ActivityService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_INVENTORY_EVENTS_QUEUE)
+    private readonly specialistAgentEvents?: Queue,
   ) {}
 
   create(dto: CreateSupplierDto) {
@@ -97,6 +109,8 @@ export class SuppliersService {
     ]);
     const createdMovements = results.slice(0, dto.items.length) as {
       id: string;
+      businessId: string;
+      createdAt: Date;
     }[];
 
     const totalUnits = dto.items.reduce((sum, i) => sum + i.qty, 0);
@@ -106,6 +120,8 @@ export class SuppliersService {
       entityType: 'Supplier',
       entityId: supplier.id,
     });
+
+    await this.queuePurchaseMovementReviews(createdMovements);
 
     return {
       supplierId,
@@ -117,5 +133,57 @@ export class SuppliersService {
         stockMovementId: createdMovements[i]?.id,
       })),
     };
+  }
+
+  private async queuePurchaseMovementReviews(
+    movements: Array<{ id: string; businessId: string; createdAt: Date }>,
+  ): Promise<void> {
+    if (!this.specialistAgentEvents || movements.length === 0) return;
+    try {
+      const businessId = movements[0]?.businessId;
+      if (!businessId || movements.some((movement) => movement.businessId !== businessId)) {
+        return;
+      }
+      const business = await this.tenantPrisma.client.business.findUnique({
+        where: { id: businessId },
+        select: { policies: true },
+      });
+      if (
+        !business ||
+        !resolvePolicies(business).bool(
+          'agents.inventoryPurchaseMovementEventReviewEnabled',
+        )
+      ) {
+        return;
+      }
+
+      for (const movement of movements) {
+        try {
+          await this.specialistAgentEvents.add(
+            INVENTORY_PURCHASE_MOVEMENT_RECORDED_EVENT_JOB,
+            {
+              businessId: movement.businessId,
+              stockMovementId: movement.id,
+              occurredAt: movement.createdAt.toISOString(),
+            },
+            {
+              jobId: `inventory-purchase-movement-${movement.businessId}-${movement.id}`,
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 1_000 },
+              removeOnComplete: 200,
+              removeOnFail: 500,
+            },
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Could not queue Inventory review for purchase movement ${movement.id}: ${(error as Error).message}`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue Inventory review for a supplier purchase movement: ${(error as Error).message}`,
+      );
+    }
   }
 }

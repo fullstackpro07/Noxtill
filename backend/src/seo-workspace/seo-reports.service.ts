@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import {
   IntegrationProvider,
   IntegrationStatus,
@@ -6,10 +7,40 @@ import {
   SeoTechnicalActionStatus,
 } from '@prisma/client';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
-import { SeoAnalyticsAttributionService } from './seo-analytics-attribution.service';
+import {
+  SeoAnalyticsAttributionService,
+  type SeoAnalyticsAttributionSnapshot,
+} from './seo-analytics-attribution.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const REPORT_PERIODS = [7, 30, 90] as const;
+
+function normalizePageUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    url.hash = '';
+    if (url.pathname.length > 1)
+      url.pathname = url.pathname.replace(/\/+$/, '');
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function pagePath(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = value.startsWith('/')
+      ? new URL(value, 'https://seo-path.invalid')
+      : new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : '/';
+  } catch {
+    return null;
+  }
+}
 
 export interface ReportMetric {
   key: string;
@@ -73,7 +104,13 @@ export class SeoReportsService {
     return out;
   }
 
-  async report(businessId: string, days: number, now = new Date()) {
+  async report(
+    businessId: string,
+    days: number,
+    now = new Date(),
+    options: { includeIntegrationData?: boolean } = {},
+  ) {
+    const includeIntegrationData = options.includeIntegrationData ?? true;
     const period = REPORT_PERIODS.includes(
       days as (typeof REPORT_PERIODS)[number],
     )
@@ -88,10 +125,12 @@ export class SeoReportsService {
       revisions,
       technical,
       briefs,
+      contentOutcomeBriefs,
+      actionRankKeywords,
       reviews,
       links,
       searchConsoleConnection,
-      googleAnalytics,
+      googleAnalyticsData,
     ] = await Promise.all([
       this.db.trackedKeyword.findMany({
         where: { businessId },
@@ -120,8 +159,20 @@ export class SeoReportsService {
         },
       }),
       this.db.seoContentRevision.findMany({
-        where: { businessId, verifiedAt: { gte: baselineFrom } },
-        select: { verifiedAt: true },
+        where: {
+          businessId,
+          OR: [
+            { verifiedAt: { gte: baselineFrom } },
+            { appliedAt: { gte: baselineFrom } },
+          ],
+        },
+        select: {
+          id: true,
+          pageUrl: true,
+          primaryKeyword: true,
+          appliedAt: true,
+          verifiedAt: true,
+        },
       }),
       this.db.seoTechnicalAction.findMany({
         where: {
@@ -134,7 +185,15 @@ export class SeoReportsService {
             },
           ],
         },
-        select: { verifiedAt: true, appliedAt: true, status: true },
+        select: {
+          id: true,
+          type: true,
+          sourceUrl: true,
+          targetValue: true,
+          verifiedAt: true,
+          appliedAt: true,
+          status: true,
+        },
       }),
       this.db.seoContentBrief.findMany({
         where: {
@@ -144,6 +203,51 @@ export class SeoReportsService {
         },
         select: { publishedAt: true, liveConfirmedAt: true },
       }),
+      this.db.seoContentBrief.findMany({
+        where: {
+          businessId,
+          status: SeoContentBriefStatus.published,
+          publishedAt: { gte: baselineFrom },
+        },
+        orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
+        take: 100,
+        select: {
+          id: true,
+          topic: true,
+          publishedUrl: true,
+          publishedAt: true,
+          liveConfirmedAt: true,
+          baselineRank: true,
+          keyword: {
+            select: {
+              keyword: true,
+              snapshots: {
+                where: { capturedAt: { lte: now } },
+                orderBy: [{ capturedAt: 'desc' }, { id: 'desc' }],
+                take: 60,
+                select: {
+                  rank: true,
+                  capturedAt: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.db.trackedKeyword.findMany({
+        where: { businessId },
+        orderBy: [{ keyword: 'asc' }, { id: 'asc' }],
+        select: {
+          keyword: true,
+          targetPageUrl: true,
+          snapshots: {
+            where: { capturedAt: { lte: now } },
+            orderBy: [{ capturedAt: 'desc' }, { id: 'desc' }],
+            take: 60,
+            select: { rank: true, capturedAt: true },
+          },
+        },
+      }),
       this.db.externalReview.findMany({
         where: { businessId, createdAt: { gte: baselineFrom, lte: now } },
         select: { stars: true, createdAt: true },
@@ -152,17 +256,29 @@ export class SeoReportsService {
         where: { businessId, createdAt: { gte: baselineFrom, lte: now } },
         select: { createdAt: true },
       }),
-      this.db.integration.findUnique({
-        where: {
-          businessId_provider: {
-            businessId,
-            provider: IntegrationProvider.google_search_console,
-          },
-        },
-        select: { status: true, meta: true },
-      }),
-      this.analyticsAttribution.summary(businessId),
+      includeIntegrationData
+        ? this.db.integration.findUnique({
+            where: {
+              businessId_provider: {
+                businessId,
+                provider: IntegrationProvider.google_search_console,
+              },
+            },
+            select: { status: true, meta: true },
+          })
+        : Promise.resolve(null),
+      includeIntegrationData
+        ? this.analyticsAttribution.summary(businessId)
+        : Promise.resolve(null),
     ]);
+    const googleAnalytics = googleAnalyticsData ?? {
+      status: 'not_evaluated' as const,
+      selectedProperty: null,
+      snapshot: null,
+      windowDays: 28,
+      disclosure:
+        'Google Analytics evidence was not read because Integrations is disabled for this business.',
+    };
 
     const integrationMeta =
       searchConsoleConnection?.meta &&
@@ -175,6 +291,7 @@ export class SeoReportsService {
         ? integrationMeta.searchConsoleSelectedProperty
         : null;
     const searchConsoleSnapshots =
+      includeIntegrationData &&
       searchConsoleConnection?.status === IntegrationStatus.connected &&
       selectedProperty
         ? await this.db.seoSearchConsoleSnapshot.findMany({
@@ -256,6 +373,235 @@ export class SeoReportsService {
       revisions.filter((row) => filter(row.verifiedAt)).length +
       technical.filter((row) => filter(row.verifiedAt)).length +
       briefs.filter((row) => filter(row.liveConfirmedAt)).length;
+
+    const contentRankOutcomes = contentOutcomeBriefs.map((brief) => {
+      const publishedAt = brief.publishedAt;
+      const afterPublish = publishedAt
+        ? (brief.keyword?.snapshots.find(
+            (snapshot) => snapshot.capturedAt > publishedAt,
+          ) ?? null)
+        : null;
+      const measuredRank = afterPublish?.rank ?? null;
+      const change =
+        brief.baselineRank !== null && measuredRank !== null
+          ? brief.baselineRank - measuredRank
+          : null;
+      const state = !brief.keyword
+        ? 'keyword_not_linked'
+        : brief.baselineRank === null
+          ? 'baseline_not_available'
+          : !afterPublish
+            ? 'awaiting_post_publish_check'
+            : measuredRank === null
+              ? 'not_in_results'
+              : 'observed';
+      return {
+        briefId: brief.id,
+        topic: brief.topic,
+        keyword: brief.keyword?.keyword ?? null,
+        publishedUrl: brief.publishedUrl,
+        publishedAt,
+        liveConfirmedAt: brief.liveConfirmedAt,
+        baselineRank: brief.baselineRank,
+        measuredRank,
+        measuredAt: afterPublish?.capturedAt ?? null,
+        rankChange: change,
+        state,
+        source: 'SerpApi tracked-keyword rank history',
+        caveat:
+          'The baseline is the tracked keyword rank recorded at publication and the follow-up is the latest saved check after publication. This is site-level keyword movement, not the published page’s verified position, and does not show that publication caused the movement.',
+      };
+    });
+
+    const rankOutcomeForAction = (action: {
+      id: string;
+      kind: 'on_page' | 'technical';
+      label: string;
+      targetUrl: string;
+      appliedAt: Date;
+      verifiedAt: Date | null;
+      keywordMatch: (keyword: string) => boolean;
+      urlMatch: (keywordUrl: string | null) => boolean;
+    }) => {
+      const keyword =
+        actionRankKeywords.find((row) => action.keywordMatch(row.keyword)) ??
+        actionRankKeywords.find((row) => action.urlMatch(row.targetPageUrl));
+      const before =
+        keyword?.snapshots.find(
+          (snapshot) => snapshot.capturedAt <= action.appliedAt,
+        ) ?? null;
+      const after =
+        keyword?.snapshots.find(
+          (snapshot) => snapshot.capturedAt > action.appliedAt,
+        ) ?? null;
+      const rankChange =
+        before?.rank != null && after?.rank != null
+          ? before.rank - after.rank
+          : null;
+      const state = !keyword
+        ? 'keyword_not_linked'
+        : !before
+          ? 'baseline_not_available'
+          : !after
+            ? 'awaiting_post_action_check'
+            : after.rank === null
+              ? 'not_in_results'
+              : 'observed';
+      return {
+        actionId: action.id,
+        kind: action.kind,
+        label: action.label,
+        targetUrl: action.targetUrl,
+        appliedAt: action.appliedAt,
+        verifiedAt: action.verifiedAt,
+        keyword: keyword?.keyword ?? null,
+        baselineRank: before?.rank ?? null,
+        baselineCheckedAt: before?.capturedAt ?? null,
+        measuredRank: after?.rank ?? null,
+        measuredAt: after?.capturedAt ?? null,
+        rankChange,
+        state,
+        source: 'SerpApi tracked-keyword rank history',
+        caveat:
+          'Ranks are the tracked site-level keyword observation before and after the recorded application date. They do not identify the exact target URL position or show that this change caused movement.',
+      };
+    };
+    const actionRankOutcomes = [
+      ...revisions
+        .filter((revision) => revision.appliedAt !== null)
+        .map((revision) => {
+          const targetUrl = revision.pageUrl;
+          const primaryKeyword = revision.primaryKeyword?.trim().toLowerCase();
+          const normalizedUrl = normalizePageUrl(targetUrl);
+          return rankOutcomeForAction({
+            id: revision.id,
+            kind: 'on_page',
+            label: 'On-Page revision',
+            targetUrl,
+            appliedAt: revision.appliedAt!,
+            verifiedAt: revision.verifiedAt,
+            keywordMatch: (keyword) =>
+              Boolean(primaryKeyword) &&
+              keyword.trim().toLowerCase() === primaryKeyword,
+            urlMatch: (keywordUrl) =>
+              Boolean(normalizedUrl) &&
+              normalizePageUrl(keywordUrl) === normalizedUrl,
+          });
+        }),
+      ...technical
+        .filter((action) => action.appliedAt !== null)
+        .map((action) => {
+          const normalizedUrl = normalizePageUrl(action.sourceUrl);
+          return rankOutcomeForAction({
+            id: action.id,
+            kind: 'technical',
+            label: `Technical ${action.type} change`,
+            targetUrl: action.sourceUrl,
+            appliedAt: action.appliedAt!,
+            verifiedAt: action.verifiedAt,
+            keywordMatch: () => false,
+            urlMatch: (keywordUrl) =>
+              Boolean(normalizedUrl) &&
+              normalizePageUrl(keywordUrl) === normalizedUrl,
+          });
+        }),
+    ]
+      .sort(
+        (left, right) => right.appliedAt.getTime() - left.appliedAt.getTime(),
+      )
+      .slice(0, 100);
+
+    const landingPageSnapshot = googleAnalytics.snapshot;
+    const landingPageOutcomeForAction = (action: {
+      id: string;
+      kind: 'on_page' | 'technical';
+      label: string;
+      targetUrl: string;
+      appliedAt: Date;
+    }) => {
+      const targetPath = pagePath(action.targetUrl);
+      const selectMatchingPaths = (
+        window: SeoAnalyticsAttributionSnapshot['current'],
+      ) => {
+        const landingPages = window.landingPages;
+        if (!landingPages || landingPages.dataState === 'not_available') {
+          return {
+            dataState: 'not_available' as const,
+            rows: [],
+            reason:
+              landingPages?.reason ??
+              'Google Analytics landing-page data is not available in the saved snapshot.',
+          };
+        }
+        if (!targetPath) {
+          return {
+            dataState: 'path_not_matchable' as const,
+            rows: [],
+            reason: 'The recorded action URL does not contain a valid HTTP page path.',
+          };
+        }
+        const rows = landingPages.rows.filter(
+          (row) => pagePath(row.landingPage) === targetPath,
+        );
+        return {
+          dataState: rows.length ? ('matched' as const) : ('no_exact_path' as const),
+          rows: rows.map((row) => ({
+            landingPage: targetPath,
+            sessions: row.sessions,
+            keyEvents: row.keyEvents,
+            totalRevenue: row.totalRevenue,
+          })),
+          reason: rows.length
+            ? null
+            : 'No exact landing-page path was returned for this action URL in this saved period.',
+        };
+      };
+      const comparison = landingPageSnapshot
+        ? selectMatchingPaths(landingPageSnapshot.comparison)
+        : {
+            dataState: 'not_available' as const,
+            rows: [],
+            reason: 'Sync Google Analytics Organic Search data in SEO Settings first.',
+          };
+      const current = landingPageSnapshot
+        ? selectMatchingPaths(landingPageSnapshot.current)
+        : {
+            dataState: 'not_available' as const,
+            rows: [],
+            reason: 'Sync Google Analytics Organic Search data in SEO Settings first.',
+          };
+      return {
+        actionId: action.id,
+        kind: action.kind,
+        label: action.label,
+        targetUrl: action.targetUrl,
+        targetPath,
+        appliedAt: action.appliedAt,
+        property: landingPageSnapshot?.property ?? null,
+        propertyName: landingPageSnapshot?.propertyName ?? null,
+        currencyCode: landingPageSnapshot?.currencyCode ?? null,
+        comparisonPeriod: landingPageSnapshot
+          ? {
+              startDate: landingPageSnapshot.comparison.startDate,
+              endDate: landingPageSnapshot.comparison.endDate,
+            }
+          : null,
+        currentPeriod: landingPageSnapshot
+          ? {
+              startDate: landingPageSnapshot.current.startDate,
+              endDate: landingPageSnapshot.current.endDate,
+            }
+          : null,
+        comparison,
+        current,
+        fetchedAt: landingPageSnapshot?.fetchedAt ?? null,
+        disclosure:
+          'Rows are Google Analytics Organic Search landing-page observations matched by exact URL path (query strings are ignored). They are the selected property’s saved comparison and current periods, not action-timed measurements, Noxtill order reconciliation, or evidence that the SEO action caused a change.',
+      };
+    };
+    const actionLandingPageOutcomes = actionRankOutcomes.map((action) =>
+      landingPageOutcomeForAction(action),
+    );
 
     const top10 = (buckets: RankBuckets) => buckets.top3 + buckets.top10;
     const metrics: ReportMetric[] = [
@@ -373,6 +719,31 @@ export class SeoReportsService {
       },
     ];
 
+    const savedOutcomeSnapshots = await this.db.seoOutcomeSnapshot.findMany({
+      where: { businessId },
+      orderBy: [{ measuredAt: 'desc' }, { id: 'asc' }],
+      take: 100,
+      select: {
+        id: true,
+        actionType: true,
+        actionId: true,
+        actionLabel: true,
+        keyword: true,
+        targetUrl: true,
+        appliedAt: true,
+        baselineRank: true,
+        baselineCapturedAt: true,
+        measuredRank: true,
+        measuredAt: true,
+        rankChange: true,
+        outcomeState: true,
+        rankSource: true,
+        crawlVerifiedAt: true,
+        caveat: true,
+        createdAt: true,
+      },
+    });
+
     return {
       period: {
         days: period,
@@ -382,9 +753,14 @@ export class SeoReportsService {
         baselineTo: currentFrom,
       },
       metrics,
+      contentRankOutcomes,
+      actionRankOutcomes,
+      actionLandingPageOutcomes,
+      savedOutcomeSnapshots,
       searchConsole: {
-        status:
-          searchConsoleConnection?.status ?? IntegrationStatus.not_connected,
+        status: includeIntegrationData
+          ? (searchConsoleConnection?.status ?? IntegrationStatus.not_connected)
+          : 'not_evaluated',
         selectedProperty,
         snapshots: searchConsoleSnapshots.map((snapshot) => ({
           id: snapshot.id,
@@ -410,7 +786,15 @@ export class SeoReportsService {
       rankDistribution: { baseline: baselineBuckets, current: currentBuckets },
       keywords: keywordRows,
       notTracked: [
-        ...(!searchConsoleConnection ||
+        ...(!includeIntegrationData
+          ? [
+              {
+                label: 'Organic clicks and impressions',
+                reason:
+                  'Not evaluated because the Integrations module is disabled.',
+              },
+            ]
+          : !searchConsoleConnection ||
         searchConsoleConnection.status !== IntegrationStatus.connected ||
         !hasSearchConsoleCounts
           ? [
@@ -426,7 +810,15 @@ export class SeoReportsService {
               },
             ]
           : []),
-        ...(!googleAnalytics.snapshot
+        ...(!includeIntegrationData
+          ? [
+              {
+                label: 'GA4 Organic Search sessions, key events and revenue',
+                reason:
+                  'Not evaluated because the Integrations module is disabled.',
+              },
+            ]
+          : !googleAnalytics.snapshot
           ? [
               {
                 label: 'GA4 Organic Search sessions, key events and revenue',
@@ -439,24 +831,134 @@ export class SeoReportsService {
               },
             ]
           : []),
-        ...(!googleAnalytics.snapshot?.current.landingPages ||
-        googleAnalytics.snapshot.current.landingPages.dataState ===
-          'not_available'
-          ? [
-              {
-                label: 'Landing-page traffic',
-                reason:
-                  googleAnalytics.snapshot?.current.landingPages?.reason ??
-                  'Sync Google Analytics in SEO Settings to request Organic Search metrics by landing page.',
-              },
-            ]
-          : []),
+        ...(includeIntegrationData &&
+          (!googleAnalytics.snapshot?.current.landingPages ||
+          googleAnalytics.snapshot.current.landingPages.dataState ===
+            'not_available'
+            ? [
+                {
+                  label: 'Landing-page traffic',
+                  reason:
+                    googleAnalytics.snapshot?.current.landingPages?.reason ??
+                    'Sync Google Analytics in SEO Settings to request Organic Search metrics by landing page.',
+                },
+              ]
+            : [])),
         {
           label: 'SEO-attributed Noxtill orders',
           reason:
             'GA4 key events and total revenue are not reconciled to Noxtill orders and do not establish that SEO caused a sale.',
         },
       ],
+    };
+  }
+
+  /** Capture the currently saved, post-action rank observations as immutable report evidence. */
+  async saveOutcomeSnapshots(
+    businessId: string,
+    actorUserId: string,
+    days: number,
+    now = new Date(),
+  ) {
+    const report = await this.report(businessId, days, now);
+    const observations = [
+      ...report.contentRankOutcomes
+        .filter((row) => row.measuredAt !== null)
+        .map((row) => ({
+          actionType: 'content_published',
+          actionId: row.briefId,
+          actionLabel: row.topic,
+          keyword: row.keyword,
+          targetUrl: row.publishedUrl,
+          appliedAt: row.publishedAt!,
+          baselineRank: row.baselineRank,
+          baselineCapturedAt: row.publishedAt,
+          measuredRank: row.measuredRank,
+          measuredAt: row.measuredAt!,
+          rankChange: row.rankChange,
+          outcomeState: row.state,
+          rankSource: row.source,
+          crawlVerifiedAt: row.liveConfirmedAt,
+          caveat: row.caveat,
+        })),
+      ...report.actionRankOutcomes
+        .filter((row) => row.measuredAt !== null)
+        .map((row) => ({
+          actionType: row.kind,
+          actionId: row.actionId,
+          actionLabel: row.label,
+          keyword: row.keyword,
+          targetUrl: row.targetUrl,
+          appliedAt: row.appliedAt,
+          baselineRank: row.baselineRank,
+          baselineCapturedAt: row.baselineCheckedAt,
+          measuredRank: row.measuredRank,
+          measuredAt: row.measuredAt!,
+          rankChange: row.rankChange,
+          outcomeState: row.state,
+          rankSource: row.source,
+          crawlVerifiedAt: row.verifiedAt,
+          caveat: row.caveat,
+        })),
+    ];
+
+    const createRows = observations.map((row) => {
+      const observationKey = createHash('sha256')
+        .update(
+          JSON.stringify([
+            row.actionType,
+            row.actionId,
+            row.appliedAt.toISOString(),
+            row.baselineCapturedAt?.toISOString() ?? null,
+            row.baselineRank,
+            row.measuredAt.toISOString(),
+            row.measuredRank,
+          ]),
+        )
+        .digest('hex');
+      return {
+        businessId,
+        ...row,
+        observationKey,
+        createdByUserId: actorUserId,
+      };
+    });
+
+    const createdCount = await this.tenantPrisma.client.$transaction(
+      async (tx) => {
+        const result = createRows.length
+          ? await tx.seoOutcomeSnapshot.createMany({
+              data: createRows,
+              skipDuplicates: true,
+            })
+          : { count: 0 };
+        await tx.auditLog.create({
+          data: {
+            businessId,
+            actorUserId,
+            action: 'seo_outcome_snapshots.capture',
+            entity: 'SeoOutcomeSnapshot',
+            entityId: `capture:${now.toISOString()}`,
+            after: {
+              requestedPeriodDays: report.period.days,
+              observedCandidates: createRows.length,
+              createdCount: result.count,
+              duplicateCount: createRows.length - result.count,
+              source: 'saved tracked-keyword rank history',
+            },
+          },
+        });
+        return result.count;
+      },
+    );
+
+    return {
+      observedCandidates: createRows.length,
+      createdCount,
+      duplicateCount: createRows.length - createdCount,
+      capturedAt: now,
+      disclosure:
+        'Snapshots preserve saved site-level keyword observations. They do not prove that an SEO action caused rank movement or that a keyword rank is the exact target page position.',
     };
   }
 }

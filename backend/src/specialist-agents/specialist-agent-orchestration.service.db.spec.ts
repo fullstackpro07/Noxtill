@@ -43,6 +43,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
   let disableFinanceAfterInventory = false;
   let disableFinanceModuleAfterInventory = false;
   const stamp = Date.now();
+  const ownerUserId = `specialist-orchestration-owner-${stamp}`;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -85,7 +86,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
           requestedParentRunId === options.parentRunId
         ) {
           cancelParentRunId = null;
-          await service.cancelRun(childBusinessId, requestedParentRunId);
+          await service.cancelRun(childBusinessId, requestedParentRunId, ownerUserId);
         }
         if (disableFinanceAfterInventory) {
           disableFinanceAfterInventory = false;
@@ -151,6 +152,17 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
         },
       })
     ).id;
+    await prisma.user.create({
+      data: {
+        id: ownerUserId,
+        email: `${ownerUserId}@example.test`,
+        name: 'Specialist Orchestration Owner',
+        passwordHash: 'unused-test-password-hash',
+      },
+    });
+    await prisma.businessUser.create({
+      data: { businessId, userId: ownerUserId, role: 'owner' },
+    });
     otherBusinessId = (
       await prisma.business.create({
         data: {
@@ -186,13 +198,23 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
         action: 'specialist_agent.orchestration_cross_tenant_access_denied',
       },
     });
+    await prisma.businessUser.deleteMany({ where: { userId: ownerUserId } });
     await prisma.business.deleteMany({
       where: { id: { in: [businessId, otherBusinessId, disabledBusinessId] } },
     });
+    await prisma.user.deleteMany({ where: { id: ownerUserId } });
     await prisma.$disconnect();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { active: true },
+    });
+    await prisma.businessUser.update({
+      where: { businessId_userId: { businessId, userId: ownerUserId } },
+      data: { active: true },
+    });
     inventoryRuns.mockClear();
     financeRuns.mockClear();
     inventoryRunKeys.length = 0;
@@ -214,12 +236,12 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
   it('persists an idempotent parent run and a real linked child run', async () => {
     const first = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-qa-0001',
     );
     const retry = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-qa-0001',
     );
 
@@ -313,6 +335,67 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     );
   });
 
+  it('fails a queued review when its initiating owner is deactivated', async () => {
+    const queued = await service.run(
+      businessId,
+      ownerUserId,
+      'orchestration-qa-owner-revoked-0001',
+    );
+    await prisma.businessUser.update({
+      where: { businessId_userId: { businessId, userId: ownerUserId } },
+      data: { active: false },
+    });
+
+    await processLastQueuedJob();
+
+    const finished = await prisma.specialistAgentRun.findFirstOrThrow({
+      where: { id: queued.id, businessId },
+    });
+    expect(finished.status).toBe('failed');
+    expect(finished.errorCode).toBe(
+      'SPECIALIST_ORCHESTRATION_ACTOR_PERMISSION_REVOKED',
+    );
+    expect(inventoryRuns).not.toHaveBeenCalled();
+  });
+
+  it('refuses direct review admission without an active owner membership', async () => {
+    await expect(
+      service.run(
+        businessId,
+        'not-an-active-owner',
+        'orchestration-qa-direct-service-unauthorized-0001',
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'SPECIALIST_ORCHESTRATION_ACTOR_PERMISSION_REVOKED',
+      },
+    });
+    expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it('does not start a queued review after its business is deactivated', async () => {
+    const queued = await service.run(
+      businessId,
+      ownerUserId,
+      'orchestration-qa-business-deactivated-0001',
+    );
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { active: false },
+    });
+
+    await processLastQueuedJob();
+
+    const finished = await prisma.specialistAgentRun.findFirstOrThrow({
+      where: { id: queued.id, businessId },
+    });
+    expect(finished.status).toBe('failed');
+    expect(finished.errorCode).toBe(
+      'SPECIALIST_ORCHESTRATION_BUSINESS_INACTIVE',
+    );
+    expect(inventoryRuns).not.toHaveBeenCalled();
+  });
+
   it('lists only rows from the active tenant even when passed another business id', async () => {
     cls.set(CLS_KEY_BUSINESS_ID, otherBusinessId);
     const result = await service.listRuns(businessId);
@@ -344,14 +427,14 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
 
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     await expect(
-      service.cancelRun(businessId, foreignRun.id, 'orchestration-owner'),
+      service.cancelRun(businessId, foreignRun.id, ownerUserId),
     ).rejects.toMatchObject({
       response: { code: 'SPECIALIST_ORCHESTRATION_NOT_FOUND' },
     });
     await expect(
       service.retryFailed(
         businessId,
-        'orchestration-owner',
+        ownerUserId,
         foreignRun.id,
         'cross-tenant-probe-retry-01',
       ),
@@ -374,7 +457,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
       { operation: 'retry_failed', denied: true },
     ]);
     expect(
-      auditRows.every((row) => row.actorUserId === 'orchestration-owner'),
+      auditRows.every((row) => row.actorUserId === ownerUserId),
     ).toBe(true);
     expect(JSON.stringify(auditRows)).not.toContain(otherBusinessId);
 
@@ -391,7 +474,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
       where: { businessId, agentKey: 'specialist_agent_orchestrator' },
     });
     await expect(
-      service.run(businessId, 'orchestration-owner'),
+      service.run(businessId, ownerUserId),
     ).rejects.toMatchObject({
       response: { code: 'SPECIALIST_ORCHESTRATION_IDEMPOTENCY_REQUIRED' },
     });
@@ -406,11 +489,11 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     const queued = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-cancel-before-start-01',
     );
 
-    const requested = await service.cancelRun(businessId, queued.id);
+    const requested = await service.cancelRun(businessId, queued.id, ownerUserId);
     expect(requested.status).toBe('cancel_requested');
     await processLastQueuedJob();
 
@@ -446,10 +529,10 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     const queued = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-cancel-admission-race-01',
     );
-    await service.cancelRun(businessId, queued.id);
+    await service.cancelRun(businessId, queued.id, ownerUserId);
     const internals = service as unknown as {
       saveProgress: (
         runId: string,
@@ -491,7 +574,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, businessId);
     const queued = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-cancel-after-current-01',
     );
     cancelParentRunId = queued.id;
@@ -516,7 +599,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     cls.set(CLS_KEY_BUSINESS_ID, disabledBusinessId);
     const result = await service.run(
       disabledBusinessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-qa-disabled-0001',
     );
     await processLastQueuedJob();
@@ -574,7 +657,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
 
     const queued = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-live-policy-0001',
     );
     await processLastQueuedJob();
@@ -618,7 +701,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
 
     const queued = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-live-module-policy-0001',
     );
     await processLastQueuedJob();
@@ -647,7 +730,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
         moduleId: 'shared',
         triggerType: 'manual',
         status: 'running',
-        initiatedByUserId: 'orchestration-owner',
+        initiatedByUserId: ownerUserId,
         inputRefs: [
           {
             source: 'enabled_specialist_agent_policies',
@@ -675,7 +758,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     expect(recoveredJob).toMatchObject({
       businessId,
       parentRunId: orphan.id,
-      actorUserId: 'orchestration-owner',
+      actorUserId: ownerUserId,
       mode: 'run',
     });
 
@@ -692,7 +775,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     failNextInventoryRun = true;
     const first = await service.run(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       'orchestration-retry-start-01',
     );
     expect(first.status).toBe('running');
@@ -713,7 +796,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
 
     const retry = await service.retryFailed(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       firstCompleted.id,
       'orchestration-retry-key-01',
     );
@@ -730,7 +813,7 @@ describe('SpecialistAgentOrchestrationService (MySQL)', () => {
     await processLastQueuedJob();
     const repeatedRetry = await service.retryFailed(
       businessId,
-      'orchestration-owner',
+      ownerUserId,
       firstCompleted.id,
       'orchestration-retry-key-01',
     );

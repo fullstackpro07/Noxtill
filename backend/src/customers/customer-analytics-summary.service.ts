@@ -17,7 +17,17 @@ export class CustomerAnalyticsSummaryService {
   ) {}
 
   /** Uses the shared Analytics definitions for customer retention, LTV and feedback. */
-  async customerSummary(businessId: string, branchId?: string) {
+  async customerSummary(
+    businessId: string,
+    branchId?: string,
+    options: {
+      includeCustomerFeedback?: boolean;
+      includeFinancialAggregates?: boolean;
+    } = {},
+  ) {
+    const includeCustomerFeedback = options.includeCustomerFeedback !== false;
+    const includeFinancialAggregates =
+      options.includeFinancialAggregates !== false;
     const ids = await this.branchScope.resolveIds(businessId, branchId);
     const now = new Date();
     const monthStart = new Date(
@@ -35,28 +45,35 @@ export class CustomerAnalyticsSummaryService {
     const [lapsedSegment, customers, newThisMonth, customerFeedbackGroups] =
       await Promise.all([
         this.segments.getSegment('lapsed'),
-        this.prisma.customer.findMany({
-          where: excludeErasedCustomers({ businessId: { in: ids } }),
-          select: { id: true, visitCount: true, lifetimeSpend: true },
-        }),
+        includeFinancialAggregates
+          ? this.prisma.customer.findMany({
+              where: excludeErasedCustomers({ businessId: { in: ids } }),
+              select: { id: true, visitCount: true, lifetimeSpend: true },
+            })
+          : this.prisma.customer.findMany({
+              where: excludeErasedCustomers({ businessId: { in: ids } }),
+              select: { id: true, visitCount: true },
+            }),
         this.prisma.customer.count({
           where: excludeErasedCustomers({
             businessId: { in: ids },
             createdAt: { gte: monthStart, lt: monthEnd },
           }),
         }),
-        this.prisma.reviewRequest.groupBy({
-          by: ['stars', 'routedTo'],
-          where: {
-            businessId: { in: ids },
-            customerId: { not: null },
-            status: 'rated',
-            stars: { not: null },
-            respondedAt: { gte: customerFeedbackFrom, lte: now },
-            customer: { isNot: { phone: { startsWith: 'erased-' } } },
-          },
-          _count: { _all: true },
-        }),
+        includeCustomerFeedback
+          ? this.prisma.reviewRequest.groupBy({
+              by: ['stars', 'routedTo'],
+              where: {
+                businessId: { in: ids },
+                customerId: { not: null },
+                status: 'rated',
+                stars: { not: null },
+                respondedAt: { gte: customerFeedbackFrom, lte: now },
+                customer: { isNot: { phone: { startsWith: 'erased-' } } },
+              },
+              _count: { _all: true },
+            })
+          : Promise.resolve(null),
       ]);
 
     const ratingCounts = [0, 0, 0, 0, 0];
@@ -64,7 +81,7 @@ export class CustomerAnalyticsSummaryService {
     let starTotal = 0;
     let publicRouteCount = 0;
     let privateRouteCount = 0;
-    for (const group of customerFeedbackGroups) {
+    for (const group of customerFeedbackGroups ?? []) {
       const count = Number(group._count._all);
       responseCount += count;
       if (group.stars !== null && group.stars >= 1 && group.stars <= 5) {
@@ -74,24 +91,26 @@ export class CustomerAnalyticsSummaryService {
       if (group.routedTo === 'public') publicRouteCount += count;
       if (group.routedTo === 'private') privateRouteCount += count;
     }
-    const customerFeedback = {
-      windowDays: 90,
-      from: customerFeedbackFrom.toISOString(),
-      observedAt: now.toISOString(),
-      responseCount,
-      averageStars:
-        responseCount > 0 ? round2(starTotal / responseCount) : null,
-      ratingCounts: ratingCounts.map((count, index) => ({
-        stars: index + 1,
-        count,
-      })),
-      routedCounts: {
-        public: publicRouteCount,
-        private: privateRouteCount,
-      },
-      source: 'customer_linked_noxtill_review_requests',
-      note: 'Only submitted Noxtill review requests linked to non-erased customer records are included. External platform reviews are not linked to CRM customers here.',
-    };
+    const customerFeedback = includeCustomerFeedback
+      ? {
+          windowDays: 90,
+          from: customerFeedbackFrom.toISOString(),
+          observedAt: now.toISOString(),
+          responseCount,
+          averageStars:
+            responseCount > 0 ? round2(starTotal / responseCount) : null,
+          ratingCounts: ratingCounts.map((count, index) => ({
+            stars: index + 1,
+            count,
+          })),
+          routedCounts: {
+            public: publicRouteCount,
+            private: privateRouteCount,
+          },
+          source: 'customer_linked_noxtill_review_requests',
+          note: 'Only submitted Noxtill review requests linked to non-erased customer records are included. External platform reviews are not linked to CRM customers here.',
+        }
+      : null;
 
     const withVisit = customers.filter((customer) => customer.visitCount >= 1);
     const returning = customers.filter((customer) => customer.visitCount > 1);
@@ -99,9 +118,15 @@ export class CustomerAnalyticsSummaryService {
       withVisit.length > 0
         ? round2((returning.length / withVisit.length) * 100)
         : 0;
-    const spends = customers
-      .map((customer) => Number(customer.lifetimeSpend))
-      .sort((left, right) => left - right);
+    const spends: number[] = [];
+    if (includeFinancialAggregates) {
+      for (const customer of customers) {
+        if ('lifetimeSpend' in customer) {
+          spends.push(Number(customer.lifetimeSpend));
+        }
+      }
+      spends.sort((left, right) => left - right);
+    }
     const avgLTV = spends.length
       ? round2(spends.reduce((sum, value) => sum + value, 0) / spends.length)
       : 0;
@@ -112,8 +137,10 @@ export class CustomerAnalyticsSummaryService {
       returningCount: returning.length,
       withVisitCount: withVisit.length,
       retentionRate,
-      avgLTV,
-      ltvDistribution: this.buildLtvQuartiles(spends),
+      avgLTV: includeFinancialAggregates ? avgLTV : null,
+      ltvDistribution: includeFinancialAggregates
+        ? this.buildLtvQuartiles(spends)
+        : null,
       atRiskCount: lapsedSegment.count,
       customerFeedback,
     };

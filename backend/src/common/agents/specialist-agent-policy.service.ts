@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
 import { AppException } from '../filters/app.exception';
 import { resolvePolicies } from '../policies/policies.service';
@@ -13,6 +14,19 @@ import {
 } from './specialist-agent-registry';
 
 export type SpecialistAgentKey = SpecialistAgentPolicyKey;
+
+export function isSpecialistSourceModuleDisabledError(
+  error: unknown,
+): error is AppException {
+  if (!(error instanceof AppException)) return false;
+  const response = error.getResponse();
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    'code' in response &&
+    response.code === 'BUSINESS_MODULE_DISABLED'
+  );
+}
 
 @Injectable()
 export class SpecialistAgentPolicyService {
@@ -82,6 +96,71 @@ export class SpecialistAgentPolicyService {
       definition.moduleKey,
     );
     if (!resolvePolicies(business).bool(definition.enabledPolicy)) {
+      throw new AppException(
+        'SPECIALIST_AGENT_DISABLED',
+        `${definition.label} is turned off in Settings → AI & Governance.`,
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  async assertSourceModulesEnabledForBusiness(
+    businessId: string,
+    moduleKeys: readonly string[],
+  ): Promise<void> {
+    const scopedBusinessId =
+      this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
+    for (const moduleKey of new Set(moduleKeys)) {
+      await this.businessModules.assertEnabled(scopedBusinessId, moduleKey);
+    }
+  }
+
+  assertSourceModulesEnabledInTransaction(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    moduleKeys: readonly string[],
+  ): Promise<void> {
+    const scopedBusinessId =
+      this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
+    return this.businessModules.assertEnabledInTransaction(
+      tx,
+      scopedBusinessId,
+      moduleKeys,
+    );
+  }
+
+  async assertAgentEnabledInTransaction(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    agentKey: SpecialistAgentKey,
+  ): Promise<void> {
+    const scopedBusinessId =
+      this.cls.get<string>(CLS_KEY_BUSINESS_ID) ?? businessId;
+    const definition = specialistAgentByPolicyKey(agentKey);
+    const rows = await tx.$queryRaw<Array<{ policies: Prisma.JsonValue }>>`
+      SELECT policies
+      FROM businesses
+      WHERE id = ${scopedBusinessId}
+      FOR UPDATE
+    `;
+    if (!rows[0]) {
+      throw new AppException(
+        'SPECIALIST_AGENT_BUSINESS_NOT_FOUND',
+        'The business for this agent run could not be found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    await this.businessModules.assertEnabledInTransaction(
+      tx,
+      scopedBusinessId,
+      [definition.moduleKey],
+    );
+    if (
+      !resolvePolicies({ policies: rows[0].policies }).bool(
+        definition.enabledPolicy,
+      )
+    ) {
       throw new AppException(
         'SPECIALIST_AGENT_DISABLED',
         `${definition.label} is turned off in Settings → AI & Governance.`,

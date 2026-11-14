@@ -1,4 +1,12 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendGateService } from '../messaging/send-gate.service';
 import { ActivityService } from '../activity/activity.service';
@@ -9,6 +17,11 @@ import { generateReviewToken } from './review-token.util';
 import { ReviewRequestStatus, ReviewRoute, Role } from '@prisma/client';
 import { REVIEW_TOKEN_EXPIRY_DAYS } from './reviews.constants';
 import { VideoTestimonialsService } from './video-testimonials.service';
+import { resolvePolicies } from '../common/policies/policies.service';
+import {
+  CUSTOMER_REVIEW_RECEIVED_EVENT_JOB,
+  SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE,
+} from '../common/agents/specialist-agent-events.constants';
 
 /** Defense-in-depth against a distributed (multi-IP) abuser — the per-IP throttle on the mint endpoint can't catch this alone. */
 const QR_DAILY_CAP_PER_BUSINESS = 200;
@@ -25,12 +38,17 @@ interface ResolvedBranding {
  */
 @Injectable()
 export class PublicReviewService {
+  private readonly logger = new Logger(PublicReviewService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sendGate: SendGateService,
     private readonly activity: ActivityService,
     private readonly s3: S3Service,
     private readonly videoTestimonials: VideoTestimonialsService,
+    @Optional()
+    @InjectQueue(SPECIALIST_AGENT_CUSTOMER_EVENTS_QUEUE)
+    private readonly customerAgentEvents?: Queue,
   ) {}
 
   /** UPD-FE-086: resolves the real `reviewSettings.brandColor`/`logoKey` into what the 3 public
@@ -172,6 +190,7 @@ export class PublicReviewService {
     const reviewRequest = await this.loadValid(token);
     const routedTo: ReviewRoute =
       dto.stars >= 4 ? ReviewRoute.public : ReviewRoute.private;
+    const respondedAt = new Date();
 
     await this.prisma.reviewRequest.update({
       where: { id: reviewRequest.id },
@@ -179,7 +198,7 @@ export class PublicReviewService {
         stars: dto.stars,
         message: dto.message,
         routedTo,
-        respondedAt: new Date(),
+        respondedAt,
         status: ReviewRequestStatus.rated,
       },
     });
@@ -210,6 +229,7 @@ export class PublicReviewService {
         entityType: 'PrivateFeedback',
         entityId: feedback.id,
       });
+      await this.queueCustomerRatingReview(reviewRequest, respondedAt);
       await this.alertOwner(reviewRequest.businessId, dto.stars, dto.message);
       return { thankYou: true };
     }
@@ -220,6 +240,7 @@ export class PublicReviewService {
       entityType: 'ReviewRequest',
       entityId: reviewRequest.id,
     });
+    await this.queueCustomerRatingReview(reviewRequest, respondedAt);
 
     await this.maybeTriggerVideoRequest(
       reviewRequest.businessId,
@@ -243,6 +264,49 @@ export class PublicReviewService {
       return { redirects: destinations };
     }
     return { thankYou: true };
+  }
+
+  /** Best-effort opt-in event; review text, rating value and customer identity stay out of the job. */
+  private async queueCustomerRatingReview(
+    reviewRequest: {
+      id: string;
+      businessId: string;
+      customerId: string | null;
+      business: { policies: unknown };
+    },
+    respondedAt: Date,
+  ): Promise<void> {
+    if (
+      !reviewRequest.customerId ||
+      !this.customerAgentEvents ||
+      !resolvePolicies(reviewRequest.business).bool(
+        'agents.customerReviewReceivedEventReviewEnabled',
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await this.customerAgentEvents.add(
+        CUSTOMER_REVIEW_RECEIVED_EVENT_JOB,
+        {
+          businessId: reviewRequest.businessId,
+          reviewRequestId: reviewRequest.id,
+          occurredAt: respondedAt.toISOString(),
+        },
+        {
+          jobId: `customer-review-received-${reviewRequest.businessId}-${reviewRequest.id}-${respondedAt.getTime()}`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 1_000 },
+          removeOnComplete: 500,
+          removeOnFail: 1_000,
+        },
+      );
+    } catch {
+      this.logger.warn(
+        `Could not queue optional Customer Agent review event for business ${reviewRequest.businessId}`,
+      );
+    }
   }
 
   private async resolvePlatformDestinations(

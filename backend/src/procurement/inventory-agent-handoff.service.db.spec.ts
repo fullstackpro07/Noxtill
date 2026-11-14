@@ -22,6 +22,7 @@ import { ActionCenterService } from '../dashboard/action-center.service';
 import { ProcurementService } from './procurement.service';
 import { CommerceRfqsService } from '../commerce/commerce-rfqs.service';
 import { SpecialistAgentActionsService } from '../specialist-agents/specialist-agent-actions.service';
+import { SpecialistAgentActionExpiryService } from '../specialist-agents/specialist-agent-action-expiry.service';
 
 class FakeClsService {
   values: Record<string, unknown> = {};
@@ -145,6 +146,7 @@ describe('Inventory agent → canonical Procurement handoff (MySQL)', () => {
       {} as never,
       {} as never,
       new SpecialistAgentPolicyService(prisma, cls as unknown as ClsService),
+      new SpecialistAgentActionExpiryService(prisma),
     );
     inventory = new InventoryIntelligenceService(
       tenant,

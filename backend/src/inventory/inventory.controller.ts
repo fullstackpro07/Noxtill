@@ -9,6 +9,7 @@ import {
   Query,
   UseInterceptors,
 } from '@nestjs/common';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { CostVisibilityInterceptor } from '../common/policies/cost-visibility.interceptor';
 import { InventoryService } from './inventory.service';
 import { StockCountService } from './stock-count.service';
@@ -27,6 +28,10 @@ import { StockCountStatus } from '@prisma/client';
 import { InventoryIntelligenceService } from './inventory-intelligence.service';
 import { DismissInventoryCountTaskDto } from './dto/dismiss-inventory-count-task.dto';
 import { ResolveInventoryWastageReviewTaskDto } from './dto/resolve-inventory-wastage-review-task.dto';
+
+class RunInventoryAgentDto {
+  @IsOptional() @IsString() @MinLength(4) @MaxLength(1000) question?: string;
+}
 
 @Controller()
 @UseInterceptors(CostVisibilityInterceptor)
@@ -109,11 +114,14 @@ export class InventoryController {
   runInventoryAgent(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('Idempotency-Key') idempotencyKey?: string,
+    @Body() dto?: RunInventoryAgentDto,
   ) {
     return this.inventoryIntelligence.run(
       user.businessId,
       user.sub,
       idempotencyKey,
+      {},
+      dto?.question,
     );
   }
 

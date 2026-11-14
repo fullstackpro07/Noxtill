@@ -23,6 +23,7 @@ import { XeroBankTransactionStatusPanel } from "./xero-bank-transaction-status-p
 import { toast } from "@/lib/toast";
 import { SpecialistAgentUsage } from "@/components/agents/specialist-agent-usage";
 import { FinanceBudgetsPanel } from "@/components/profit/finance-budgets-panel";
+import { FinancialAgentQuestionPanel } from "@/components/profit/financial-agent-question-panel";
 
 const KPI_ICON = {
   revenue: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 6.5v11M14 9.5A2.6 2.6 0 0 0 11.5 8",
@@ -65,6 +66,26 @@ function loadWidgetPrefs(): WidgetKey[] {
 function currentMonth(): string {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function closeCueHref(kind: string): string {
+  switch (kind) {
+    case "unbalanced_posted_journals":
+    case "unresolved_manual_journals":
+    case "period_posting_lock":
+      return "/profit/journals";
+    case "unmatched_statement_lines":
+      return "/profit/reconciliation";
+    case "unsynced_xero_orders":
+      return "/integrations";
+    case "expenses_without_receipt":
+      return "/expenses";
+    case "pending_returns":
+    case "open_orders":
+      return "/orders";
+    default:
+      return "/profit/period-close";
+  }
 }
 
 function short(n: number): string {
@@ -393,6 +414,8 @@ export function ProfitOverviewView() {
         onRun={() => runAgent.mutate()}
       />
 
+      <FinancialAgentQuestionPanel canAsk={canRunFinancialAgent} />
+
       <XeroOpenItemsPanel branchId={branchId} />
       <XeroBankTransactionStatusPanel branchId={branchId} />
 
@@ -640,6 +663,7 @@ function FinancialAgentPanel({
   const approvedReturnReview = run?.output.approvedReturnReview;
   const budgetActualReview = run?.output.budgetActualReview;
   const periodCloseReadiness = run?.output.periodCloseReadiness;
+  const periodClosePriorities = run?.output.periodClosePriorities;
   const bankStatementReview = run?.output.bankStatementReview;
   const financeTrialBalance = run?.output.financeTrialBalance;
   const aiSummary = run?.output.aiSummary;
@@ -932,13 +956,47 @@ function FinancialAgentPanel({
                               <div className="rounded-[7px] p-2 sm:col-span-2" style={{ border: "1px solid var(--app-border)" }}>
                                 <div className="text-[9.5px] font-semibold" style={{ color: "var(--app-text-faint)" }}>Xero sync evidence</div>
                                 <div className="mt-0.5 text-[10.5px] font-bold" style={{ color: "var(--app-text-muted)" }}>
-                                  {business.xeroSync.status === "connected" ? `Connected · ${business.xeroSync.unsyncedOrderCount ?? "Not available"} unsynced orders` : "Not connected"}
+                                  {business.xeroSync.status === "connected" ? `Connected · ${business.xeroSync.unsyncedOrderCount ?? "Not available"} unsynced orders` : business.xeroSync.status === "not_evaluated" ? "Not evaluated because Integrations is disabled" : "Not connected"}
                                 </div>
                                 {business.xeroSync.lastSyncAt && <div className="mt-0.5 text-[9px]" style={{ color: "var(--app-text-faint)" }}>Last sync {new Date(business.xeroSync.lastSyncAt).toLocaleString()}</div>}
                               </div>
                             </div>
                           </div>
                         ))}
+                      </div>
+                      <div className="mt-3 rounded-[9px] p-2.5" style={{ border: "1px solid var(--app-border)" }}>
+                        <div className="text-[10px] font-bold" style={{ color: "var(--app-text)" }}>Deterministic review order</div>
+                        {periodClosePriorities ? (
+                          <>
+                            <p className="mb-0 mt-1 text-[9.5px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
+                              Fixed order from available source counts. Sequence is not severity or accounting materiality.
+                            </p>
+                            <div className="mt-2 flex flex-col gap-2">
+                              {periodClosePriorities.businesses.map((business) => (
+                                <div key={business.businessId}>
+                                  <div className="text-[9.5px] font-semibold" style={{ color: "var(--app-text-muted)" }}>{business.businessName} · {business.currency}</div>
+                                  {business.reviewOrder.length > 0 ? (
+                                    <ol className="mb-0 mt-1 flex list-decimal flex-col gap-1 pl-5">
+                                      {business.reviewOrder.map((cue) => (
+                                        <li key={cue.kind} className="text-[9.5px] leading-relaxed" style={{ color: "var(--app-text-muted)" }}>
+                                          <span className="font-semibold">{cue.label} · {cue.count}</span>
+                                          <span className="ml-1" style={{ color: "var(--app-text-faint)" }}>{cue.explanation}</span>
+                                          <Link href={closeCueHref(cue.kind)} className="ml-1 font-bold underline" style={{ color: "var(--app-primary)" }}>Review</Link>
+                                        </li>
+                                      ))}
+                                    </ol>
+                                  ) : (
+                                    <p className="mb-0 mt-1 text-[9.5px]" style={{ color: "var(--app-text-faint)" }}>No review cues were found in the sources checked. This is not proof that the period is fully reconciled.</p>
+                                  )}
+                                  {business.notEvaluated.map((item) => <p key={item} className="mb-0 mt-1 text-[9px]" style={{ color: "var(--app-text-faint)" }}>{item}</p>)}
+                                </div>
+                              ))}
+                            </div>
+                            <p className="mb-0 mt-2 text-[9px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>{periodClosePriorities.disclosure}</p>
+                          </>
+                        ) : (
+                          <p className="mb-0 mt-1 text-[9.5px]" style={{ color: "var(--app-text-faint)" }}>Not included in this older saved review. Run a new review to calculate the available source-based order.</p>
+                        )}
                       </div>
                       <p className="mb-0 mt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-text-faint)" }}>
                         {periodCloseReadiness.note} {periodCloseReadiness.unavailable.map((item) => `${item.label}: Not available`).join(" · ")}

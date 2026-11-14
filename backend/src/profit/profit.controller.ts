@@ -9,6 +9,7 @@ import { RequireCapability } from '../common/decorators/require-capability.decor
 import type { AuthenticatedUser } from '../common/tenancy/auth-context';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { FinancialIntelligenceService } from './financial-intelligence.service';
+import { FinanceAgentQuestionDto } from './dto/finance-agent-question.dto';
 
 /** UPD-BE-106 fix-it: this whole controller had no capability gate despite being real P&L/margin data. */
 @RequireCapability(CAPABILITIES.PROFIT_VIEW)
@@ -58,6 +59,21 @@ export class ProfitController {
       user.businessId,
       user.sub,
       query,
+      idempotencyKey,
+    );
+  }
+
+  @RequireCapability(CAPABILITIES.FINANCE_AGENT_RUN)
+  @Post('agent-questions')
+  askFinancialAgent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: FinanceAgentQuestionDto,
+    @Headers('Idempotency-Key') idempotencyKey?: string,
+  ) {
+    return this.financialIntelligence.ask(
+      user.businessId,
+      user.sub,
+      dto.question,
       idempotencyKey,
     );
   }

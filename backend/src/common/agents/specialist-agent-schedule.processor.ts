@@ -63,6 +63,7 @@ export class SpecialistAgentScheduleProcessor extends WorkerHost {
     for (;;) {
       const businesses = await this.prisma.business.findMany({
         where: {
+          active: true,
           ...(afterId ? { id: { gt: afterId } } : {}),
           // Daily reviews are default-off. Query only businesses that explicitly enabled at
           // least one schedule instead of walking every tenant and doing a module-policy lookup

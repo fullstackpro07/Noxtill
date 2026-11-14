@@ -374,6 +374,7 @@ export interface InventoryAgentRun {
   status: string;
   inputRefs: unknown[];
   output: {
+    message?: string;
     summary?: string;
     recommendationCount?: number;
     signalCounts?: {
@@ -389,19 +390,28 @@ export interface InventoryAgentRun {
       branchRebalance?: number;
       repeatedCountVariance?: number;
     };
-    branchRebalanceAvailability?: "available" | "single_location";
-    activeLocationCount?: number;
+    branchRebalanceAvailability?:
+      | "available"
+      | "single_location"
+      | "module_disabled";
+    activeLocationCount?: number | null;
     inventoryValuation?: {
       productRowCount: number;
       stockValueAtCost: number;
       overstockFlaggedValueAtCost: number;
       zeroCostPriceRowCount: number;
     };
+    moduleSources?: {
+      purchasing: "included";
+      branches: "included" | "disabled";
+      customers: "included" | "disabled";
+    };
     observedAt?: string;
     formulaVersion?: string;
     salesWindowDays?: number;
     baselineLeadTimeDays?: number;
     aiSummary?: {
+      mode?: "review" | "question";
       status: string;
       text: string | null;
       message: string | null;
@@ -564,12 +574,18 @@ export function fetchInventoryAgentRuns(): Promise<InventoryAgentRun[]> {
   return apiFetch<InventoryAgentRun[]>("/inventory/agent-runs");
 }
 
-export function runInventoryAgent(): Promise<InventoryAgentRun> {
-  return postSpecialistAgentRun("inventory", {}, (idempotencyKey) =>
+export function runInventoryAgent(question?: string): Promise<InventoryAgentRun> {
+  return postSpecialistAgentRun(
+    "inventory",
+    { question: question?.trim() || null },
+    (idempotencyKey) =>
     apiFetch<InventoryAgentRun>("/inventory/agent-runs", {
       method: "POST",
       headers: idempotencyKey
         ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
+      body: question?.trim()
+        ? JSON.stringify({ question: question.trim() })
         : undefined,
     }),
   );

@@ -1,6 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
+import { SPECIALIST_AGENT_ORCHESTRATOR } from '../common/agents/specialist-agent-registry';
+import {
+  legacySpecialistAgentSourceModules,
+  specialistAgentRunDetailsHiddenByModuleSelection,
+} from '../common/agents/specialist-agent-module-selection.util';
+import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
 import { AppException } from '../common/filters/app.exception';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
 import { ListSpecialistAgentRunsDto } from './dto/list-specialist-agent-runs.dto';
@@ -59,16 +65,38 @@ const TERMINAL_RUN_EVENT_NAMES: Record<string, string> = {
 
 const ACTION_STATE_EVENT_NAMES: Record<string, string> = {
   approval_required: 'agent.action.awaiting_approval',
+  expired: 'agent.action.expired',
   failed: 'agent.action.failed',
   partially_succeeded: 'agent.action.failed',
   verification_failed: 'agent.action.failed',
   verified: 'agent.action.verified',
 };
 
+/**
+ * A saved run can outlive the module selection under which it was produced. Keep
+ * shared run-history reads aligned with each canonical module's history policy,
+ * so a disabled source cannot be inspected through the cross-module AI Settings
+ * ledger after its own screen has been hidden.
+ */
+const RUN_DETAILS_HIDDEN_MESSAGE =
+  'Saved run details are hidden because a source module used by this agent is disabled. Enable the source modules and start a fresh review to access details.';
+
 function actionEventName(event: {
   eventType: string;
   toState: string | null;
 }): string {
+  if (event.eventType === 'execution_outcome_unknown') {
+    return 'agent.action.outcome_unknown';
+  }
+  if (event.eventType === 'verification_outcome_unknown') {
+    return 'agent.action.verification_outcome_unknown';
+  }
+  if (event.eventType === 'execution_outcome_reconciled_closed') {
+    return 'agent.action.outcome_reconciled';
+  }
+  if (event.eventType === 'verification_outcome_reconciled_closed') {
+    return 'agent.action.verification_outcome_reconciled';
+  }
   if (event.eventType === 'proposal_updated') {
     return 'agent.action.proposal_updated';
   }
@@ -88,7 +116,36 @@ function withoutInitiatingUser<T extends { initiatedByUserId: string | null }>(
 
 @Injectable()
 export class SpecialistAgentRunsService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly agentPolicy: SpecialistAgentPolicyService,
+  ) {}
+
+  private async disabledSourceModules(businessId: string) {
+    return new Set(
+      await this.agentPolicy.disabledModulesForBusiness(businessId),
+    );
+  }
+
+  private detailsRedactionMessage(
+    agentKey: string,
+    disabledModules: ReadonlySet<string>,
+    output: Prisma.JsonValue,
+  ): string | null {
+    const requiredModules = legacySpecialistAgentSourceModules(agentKey);
+    if (!requiredModules) return RUN_DETAILS_HIDDEN_MESSAGE;
+    return specialistAgentRunDetailsHiddenByModuleSelection(
+      output,
+      disabledModules,
+      requiredModules,
+    )
+      ? RUN_DETAILS_HIDDEN_MESSAGE
+      : null;
+  }
+
+  private emptyRelatedCounts() {
+    return { recommendations: 0, evidence: 0, actions: 0, toolCalls: 0 };
+  }
 
   async list(businessId: string, query: ListSpecialistAgentRunsDto) {
     const limit = query.limit ?? 25;
@@ -122,14 +179,26 @@ export class SpecialistAgentRunsService {
     });
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
+    const disabledModules = await this.disabledSourceModules(businessId);
     return {
-      items: items.map(({ _count, output, ...run }) => ({
-        ...withoutInitiatingUser(run),
-        relatedCounts: _count,
-        detailsExpired: isRunDetailsExpired(output),
-        outputRedacted: true as const,
-        detailLocation: 'canonical_module' as const,
-      })),
+      items: items.map(({ _count, output, ...run }) => {
+        const detailsRedactionMessage = this.detailsRedactionMessage(
+          run.agentKey,
+          disabledModules,
+          output,
+        );
+        return {
+          ...withoutInitiatingUser(run),
+          relatedCounts: detailsRedactionMessage
+            ? this.emptyRelatedCounts()
+            : _count,
+          detailsExpired: isRunDetailsExpired(output),
+          detailsRedacted: Boolean(detailsRedactionMessage),
+          ...(detailsRedactionMessage ? { detailsRedactionMessage } : {}),
+          outputRedacted: true as const,
+          detailLocation: 'canonical_module' as const,
+        };
+      }),
       nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
       pageSize: limit,
     };
@@ -149,10 +218,19 @@ export class SpecialistAgentRunsService {
     }
 
     const { _count, output, ...runDetails } = run;
+    const detailsRedactionMessage = this.detailsRedactionMessage(
+      run.agentKey,
+      await this.disabledSourceModules(businessId),
+      output,
+    );
     return {
       ...withoutInitiatingUser(runDetails),
-      relatedCounts: _count,
+      relatedCounts: detailsRedactionMessage
+        ? this.emptyRelatedCounts()
+        : _count,
       detailsExpired: isRunDetailsExpired(output),
+      detailsRedacted: Boolean(detailsRedactionMessage),
+      ...(detailsRedactionMessage ? { detailsRedactionMessage } : {}),
       outputRedacted: true,
       detailLocation: 'canonical_module',
     };
@@ -173,6 +251,25 @@ export class SpecialistAgentRunsService {
         'The specialist run is not available in this business.',
         HttpStatus.NOT_FOUND,
       );
+    }
+    const detailsRedactionMessage = this.detailsRedactionMessage(
+      run.agentKey,
+      await this.disabledSourceModules(businessId),
+      run.output,
+    );
+    if (detailsRedactionMessage) {
+      const limit = query.limit ?? 25;
+      return {
+        runId,
+        items: [],
+        eventHistoryNote: detailsRedactionMessage,
+        nextCursor: null,
+        hasMore: false,
+        pageSize: limit,
+        payloadValuesRedacted: true,
+        detailsRedacted: true,
+        detailsRedactionMessage,
+      };
     }
     await this.materializeLifecycleEvents(businessId, [run]);
     const limit = query.limit ?? 25;
@@ -245,11 +342,12 @@ export class SpecialistAgentRunsService {
         }),
       ),
       eventHistoryNote:
-        'New run-created, terminal outcome, and registered-tool start/result events are saved with their source records. Tool timeline payloads contain metadata only; tool inputs and outputs remain redacted in the separate ledger. Older run lifecycle and action events are materialized from saved timestamps and state when this timeline opens. Cross-agent orchestration also records worker pickup, each specialist child start/result/skip, owner stop requests, and retry queueing. Intermediate state changes in other run types and non-action activity are not captured here; legacy tool calls are not backfilled.',
+        'New direct run-created/start, terminal outcome, and registered-tool start/result events are saved with their source records. Older direct run start events and other run lifecycle/action events are materialized from saved timestamps and state when this timeline opens. Tool timeline payloads contain metadata only; tool inputs and outputs remain redacted in the separate ledger. Cross-agent orchestration records worker pickup, each specialist child start/result/skip, owner stop requests, and retry queueing. Intermediate state changes in other run types and non-action activity are not captured here; legacy tool calls are not backfilled.',
       nextCursor,
       hasMore,
       pageSize: limit,
       payloadValuesRedacted: true,
+      detailsRedacted: false,
     };
   }
 
@@ -299,6 +397,28 @@ export class SpecialistAgentRunsService {
           triggerType: run.triggerType,
         },
       });
+      // Older direct runs predate source-persisted start events. The
+      // orchestrator has its own worker-pickup event, so its enqueue-time
+      // startedAt must not be represented as actual execution.
+      if (
+        run.agentKey !== SPECIALIST_AGENT_ORCHESTRATOR.agentKey &&
+        run.startedAt
+      ) {
+        events.push({
+          ...base,
+          id: randomUUID(),
+          dedupeKey: createHash('sha256')
+            .update(`${businessId}:${run.id}:agent.run.started`)
+            .digest('hex'),
+          eventName: 'agent.run.started',
+          occurredAt: run.startedAt,
+          payload: {
+            agentKey: run.agentKey,
+            status: 'running',
+            triggerType: run.triggerType,
+          },
+        });
+      }
       if (run.finishedAt && TERMINAL_RUN_STATUSES.has(run.status)) {
         const eventName = TERMINAL_RUN_EVENT_NAMES[run.status];
         events.push({
@@ -393,7 +513,7 @@ export class SpecialistAgentRunsService {
     }
     const run = await this.tenantPrisma.client.specialistAgentRun.findFirst({
       where: { businessId, id: runId },
-      select: { id: true },
+      select: { id: true, agentKey: true, output: true },
     });
     if (!run) {
       throw new AppException(
@@ -401,6 +521,21 @@ export class SpecialistAgentRunsService {
         'The specialist run is not available in this business.',
         HttpStatus.NOT_FOUND,
       );
+    }
+    const detailsRedactionMessage = this.detailsRedactionMessage(
+      run.agentKey,
+      await this.disabledSourceModules(businessId),
+      run.output,
+    );
+    if (detailsRedactionMessage) {
+      return {
+        items: [],
+        nextCursor: null,
+        pageSize: 100,
+        observedValuesRedacted: true,
+        detailsRedacted: true,
+        detailsRedactionMessage,
+      };
     }
 
     const where: Prisma.SpecialistAgentEvidenceWhereInput = {
@@ -447,13 +582,14 @@ export class SpecialistAgentRunsService {
       nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
       pageSize: 100,
       observedValuesRedacted: true,
+      detailsRedacted: false,
     };
   }
 
   async listToolCalls(businessId: string, runId: string) {
     const run = await this.tenantPrisma.client.specialistAgentRun.findFirst({
       where: { businessId, id: runId },
-      select: { id: true },
+      select: { id: true, agentKey: true, output: true },
     });
     if (!run) {
       throw new AppException(
@@ -461,6 +597,22 @@ export class SpecialistAgentRunsService {
         'The specialist run is not available in this business.',
         HttpStatus.NOT_FOUND,
       );
+    }
+    const detailsRedactionMessage = this.detailsRedactionMessage(
+      run.agentKey,
+      await this.disabledSourceModules(businessId),
+      run.output,
+    );
+    if (detailsRedactionMessage) {
+      return {
+        items: [],
+        pageSize: 100,
+        hasMore: false,
+        inputValuesRedacted: true as const,
+        outputValuesRedacted: true as const,
+        detailsRedacted: true,
+        detailsRedactionMessage,
+      };
     }
 
     const rows =
@@ -496,6 +648,7 @@ export class SpecialistAgentRunsService {
       hasMore,
       inputValuesRedacted: true as const,
       outputValuesRedacted: true as const,
+      detailsRedacted: false,
     };
   }
 }

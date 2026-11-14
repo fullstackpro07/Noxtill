@@ -14,6 +14,9 @@ import {
 } from '../common/policies/policies.service';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
 import { TenantPrismaService } from '../common/tenancy/tenant-prisma.service';
+import { parseDisabled } from '../business-modules/business-modules.service';
+import { BUSINESS_MODULES } from '../business-modules/business-modules.constants';
+import { SpecialistAgentPolicyService } from '../common/agents/specialist-agent-policy.service';
 import { CommerceFulfillmentRouterService } from './commerce-fulfillment-router.service';
 import { CommerceRfqsService } from './commerce-rfqs.service';
 import { CommerceListingBuilderService } from './commerce-listing-builder.service';
@@ -95,6 +98,8 @@ export interface AgentToolDef extends SpecialistAgentToolContract {
   executable: boolean;
   /** A concrete, version-bound approval and canonical execution handler exists. */
   approvalSupported?: boolean;
+  /** Source modules checked by the shared specialist-tool gateway. */
+  requiredModules?: readonly string[];
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -128,6 +133,30 @@ const MAX_AGENT_TOOL_INPUT_BYTES = 8_192;
 const MAX_AGENT_INVENTORY_PRODUCTS = 500;
 const MAX_AGENT_RFQ_QUOTES = 20;
 const MAX_AGENT_RFQ_LINE_ITEMS = 100;
+
+/** Source modules read or changed by each Commerce agent tool, beyond Commerce itself. */
+const COMMERCE_AGENT_SOURCE_MODULES: Readonly<
+  Record<string, readonly string[]>
+> = {
+  get_product: ['products'],
+  get_inventory: ['inventory', 'products'],
+  get_order: ['orders'],
+  get_supplier_claim: ['inventory'],
+  get_risk_case: ['orders'],
+  get_channel_listing: ['products'],
+  get_experiment_review: ['products', 'orders'],
+  compare_quotes: ['inventory'],
+  award_rfq_quote: ['inventory'],
+  preview_b2b_quote: ['products'],
+  get_b2b_reorder_opportunities: ['orders'],
+  get_store_optimizer_review: ['products'],
+  get_production_review: ['products', 'inventory'],
+  calculate_fulfillment_route: ['orders', 'inventory', 'products'],
+  create_listing_draft: ['products'],
+  create_rfq: ['products'],
+  create_supplier_claim_draft: ['inventory', 'products'],
+  create_experiment: ['products'],
+};
 
 export function normalizeToolInput(
   tool: AgentToolDef,
@@ -479,7 +508,10 @@ export const COMMERCE_AGENT_TOOLS: AgentToolDef[] = [
     inputs: ['customerId', 'templateKey'],
     executable: false,
   },
-];
+].map((tool) => ({
+  ...tool,
+  requiredModules: COMMERCE_AGENT_SOURCE_MODULES[tool.key] ?? [],
+}));
 
 export function parseCommerceAgentWriteToolAllowlist(value: unknown): {
   keys: Set<string>;
@@ -572,10 +604,66 @@ export class CommerceAgentToolsService {
     private readonly storeOptimizer?: CommerceStoreOptimizerService,
     @Optional()
     private readonly production?: CommerceProductionService,
+    @Optional()
+    private readonly specialistAgentPolicy?: SpecialistAgentPolicyService,
   ) {}
 
   private get db() {
     return this.tenantPrisma.client;
+  }
+
+  private async disabledModulesForBusiness(businessId: string) {
+    if (this.specialistAgentPolicy) {
+      return new Set(
+        await this.specialistAgentPolicy.disabledModulesForBusiness(businessId),
+      );
+    }
+
+    // Directly constructed services in isolated integrations may not have Nest's global
+    // SpecialistAgentPolicyService. Keep the same root-business/branch selection semantics there.
+    const business = await this.db.business.findUnique({
+      where: { id: businessId },
+      select: {
+        parentId: true,
+        disabledModules: true,
+        parent: { select: { disabledModules: true } },
+      },
+    });
+    const disabled = business?.parentId
+      ? business.parent?.disabledModules
+      : business?.disabledModules;
+    return new Set(parseDisabled(disabled));
+  }
+
+  private moduleBlockForTool(
+    toolKey: string,
+    disabledModules: ReadonlySet<string>,
+  ): string | null {
+    const requiredModules = [
+      'autonomous-commerce',
+      ...(COMMERCE_AGENT_SOURCE_MODULES[toolKey] ?? []),
+    ];
+    const disabled = requiredModules.find((key) => disabledModules.has(key));
+    if (!disabled) return null;
+    const label = BUSINESS_MODULES.find((module) => module.key === disabled)?.label;
+    return `This Commerce agent tool is unavailable because ${label ?? disabled} is turned off in Settings → Modules.`;
+  }
+
+  private async toolModuleBlock(businessId: string, toolKey: string) {
+    return this.moduleBlockForTool(
+      toolKey,
+      await this.disabledModulesForBusiness(businessId),
+    );
+  }
+
+  private async assertToolModulesEnabled(businessId: string, toolKey: string) {
+    const blocked = await this.toolModuleBlock(businessId, toolKey);
+    if (!blocked) return;
+    throw new AppException(
+      COMMERCE_AGENT_ERROR_CODES.TOOL_UNAVAILABLE,
+      blocked,
+      HttpStatus.FORBIDDEN,
+    );
   }
 
   private async policy(businessId: string) {
@@ -630,6 +718,7 @@ export class CommerceAgentToolsService {
   async registry(businessId: string) {
     const { level, paused, allowedWriteToolKeys, invalidWriteToolEntries } =
       await this.policy(businessId);
+    const disabledModules = await this.disabledModulesForBusiness(businessId);
     return {
       autonomyLevel: level,
       levels: AUTONOMY_LEVELS,
@@ -643,13 +732,15 @@ export class CommerceAgentToolsService {
         approvalRequired: ALWAYS_APPROVAL.includes(tool.riskClass),
         allowedByBusinessAllowlist:
           tool.riskClass === 'READ_ONLY' || allowedWriteToolKeys.has(tool.key),
-        blockedReason: CommerceAgentToolsService.gate(
-          tool,
-          level,
-          paused,
-          allowedWriteToolKeys,
-          invalidWriteToolEntries,
-        ),
+        blockedReason:
+          this.moduleBlockForTool(tool.key, disabledModules) ??
+          CommerceAgentToolsService.gate(
+            tool,
+            level,
+            paused,
+            allowedWriteToolKeys,
+            invalidWriteToolEntries,
+          ),
       })),
     };
   }
@@ -739,6 +830,7 @@ export class CommerceAgentToolsService {
     key: string,
     input: Record<string, string>,
   ): Promise<ExecutedToolResult> {
+    await this.assertToolModulesEnabled(businessId, key);
     switch (key) {
       case 'get_product': {
         const costHidden = await this.policies.costHidden();
@@ -1931,6 +2023,47 @@ export class CommerceAgentToolsService {
   ) {
     const decisionReason = this.approvalReason(reason);
     let run = await this.findApprovalRun(businessId, runId);
+    const initialModuleBlock = await this.toolModuleBlock(businessId, run.toolKey);
+    if (initialModuleBlock && run.outcome === 'pending_approval') {
+      await this.db.$transaction(async (tx) => {
+        const changed = await tx.commerceAgentToolRun.updateMany({
+          where: { id: run.id, businessId, outcome: 'pending_approval' },
+          data: {
+            outcome: 'refused',
+            refusalReason: initialModuleBlock,
+          },
+        });
+        if (changed.count) {
+          await tx.auditLog.create({
+            data: {
+              businessId,
+              actorUserId: approverUserId,
+              action: 'commerce.agent_tool_module_refused',
+              entity: 'CommerceAgentToolRun',
+              entityId: run.id,
+              before: { outcome: 'pending_approval' },
+              after: {
+                outcome: 'refused',
+                toolKey: run.toolKey,
+                reason: initialModuleBlock,
+              },
+            },
+          });
+        }
+      });
+      run = await this.findApprovalRun(businessId, runId);
+      return { run: this.runView(run), result: null };
+    }
+    if (initialModuleBlock && run.outcome === 'succeeded') {
+      return { run: this.runView(run), result: null, replayed: true };
+    }
+    if (initialModuleBlock && run.outcome === 'running') {
+      throw new AppException(
+        COMMERCE_AGENT_ERROR_CODES.TOOL_UNAVAILABLE,
+        initialModuleBlock,
+        HttpStatus.FORBIDDEN,
+      );
+    }
     if (run.outcome === 'succeeded') {
       const result = await this.resolveResult(
         businessId,
@@ -1978,8 +2111,13 @@ export class CommerceAgentToolsService {
     }
     const normalizedInput = this.assertApprovalRequestIntact(run);
     const currentPolicy = await this.policy(businessId);
+    const currentModuleBlock = await this.toolModuleBlock(
+      businessId,
+      run.toolKey,
+    );
     const gate =
-      currentPolicy.level < MIN_LEVEL[tool.riskClass]
+      currentModuleBlock ??
+      (currentPolicy.level < MIN_LEVEL[tool.riskClass]
         ? `Current autonomy level ${currentPolicy.level} no longer permits this ${tool.label.toLowerCase()} tool.`
         : currentPolicy.paused
           ? 'Commerce actions are paused for this business.'
@@ -1987,7 +2125,7 @@ export class CommerceAgentToolsService {
               tool,
               currentPolicy.allowedWriteToolKeys,
               currentPolicy.invalidWriteToolEntries,
-            );
+            ));
     if (gate) {
       await this.db.$transaction(async (tx) => {
         const updated = await tx.commerceAgentToolRun.updateMany({
@@ -2091,6 +2229,34 @@ export class CommerceAgentToolsService {
       return { run: this.runView(run), result: safeResult };
     } catch (error) {
       const latest = await this.findApprovalRun(businessId, runId);
+      const moduleBlock = await this.toolModuleBlock(businessId, latest.toolKey);
+      if (moduleBlock && latest.outcome === 'running') {
+        await this.db.$transaction(async (tx) => {
+          const changed = await tx.commerceAgentToolRun.updateMany({
+            where: { id: latest.id, businessId, outcome: 'running' },
+            data: { outcome: 'refused', refusalReason: moduleBlock },
+          });
+          if (changed.count) {
+            await tx.auditLog.create({
+              data: {
+                businessId,
+                actorUserId: approverUserId,
+                action: 'commerce.agent_tool_module_refused',
+                entity: 'CommerceAgentToolRun',
+                entityId: latest.id,
+                before: { outcome: 'running' },
+                after: {
+                  outcome: 'refused',
+                  toolKey: latest.toolKey,
+                  reason: moduleBlock,
+                },
+              },
+            });
+          }
+        });
+        const refused = await this.findApprovalRun(businessId, runId);
+        return { run: this.runView(refused), result: null };
+      }
       const reconciled = await this.reconcileApprovalRun(
         businessId,
         latest,
@@ -2188,6 +2354,8 @@ export class CommerceAgentToolsService {
     }
     const { level, paused, allowedWriteToolKeys, invalidWriteToolEntries } =
       await this.policy(businessId);
+    const disabledModules = await this.disabledModulesForBusiness(businessId);
+    const moduleBlock = this.moduleBlockForTool(key, disabledModules);
     const started = Date.now();
     const correlationId = traceCorrelationId ?? randomUUID();
     let normalizedInput: Record<string, string>;
@@ -2301,6 +2469,13 @@ export class CommerceAgentToolsService {
           );
         }
         if (existing.outcome === 'succeeded') {
+          if (moduleBlock) {
+            return {
+              run: this.runView(existing),
+              result: null,
+              replayed: true,
+            };
+          }
           const result = await this.resolveResult(
             businessId,
             existing.resultResourceType,
@@ -2323,6 +2498,39 @@ export class CommerceAgentToolsService {
           return { run: this.runView(existing), result: null, replayed: true };
         }
         if (existing.outcome === 'pending_approval') {
+          if (moduleBlock) {
+            const updated = await this.db.$transaction(async (tx) => {
+              const changed = await tx.commerceAgentToolRun.updateMany({
+                where: {
+                  id: existing.id,
+                  businessId,
+                  outcome: 'pending_approval',
+                },
+                data: { outcome: 'refused', refusalReason: moduleBlock },
+              });
+              if (changed.count) {
+                await tx.auditLog.create({
+                  data: {
+                    businessId,
+                    actorUserId,
+                    action: 'commerce.agent_tool_module_refused',
+                    entity: 'CommerceAgentToolRun',
+                    entityId: existing.id,
+                    before: { outcome: 'pending_approval' },
+                    after: {
+                      outcome: 'refused',
+                      toolKey: tool.key,
+                      reason: moduleBlock,
+                    },
+                  },
+                });
+              }
+              return tx.commerceAgentToolRun.findFirstOrThrow({
+                where: { id: existing.id, businessId },
+              });
+            });
+            return { run: this.runView(updated), result: null, replayed: true };
+          }
           return {
             run: this.runView(existing, actorUserId),
             result: null,
@@ -2355,6 +2563,40 @@ export class CommerceAgentToolsService {
           HttpStatus.CONFLICT,
         );
       }
+    }
+
+    if (moduleBlock) {
+      const run = await this.db.$transaction(async (tx) => {
+        const saved = reservedRun
+          ? await tx.commerceAgentToolRun.update({
+              where: { id: reservedRun.id },
+              data: {
+                outcome: 'refused',
+                refusalReason: moduleBlock,
+                durationMs: Date.now() - started,
+              },
+            })
+          : await tx.commerceAgentToolRun.create({
+              data: recordData('refused', { refusalReason: moduleBlock }),
+            });
+        await tx.auditLog.create({
+          data: {
+            businessId,
+            actorUserId,
+            action: 'commerce.agent_tool_module_refused',
+            entity: 'CommerceAgentToolRun',
+            entityId: saved.id,
+            before: { outcome: reservedRun ? 'running' : null },
+            after: {
+              outcome: 'refused',
+              toolKey: tool.key,
+              reason: moduleBlock,
+            },
+          },
+        });
+        return saved;
+      });
+      return { run: this.runView(run), result: null };
     }
 
     if (tool.approvalSupported) {
