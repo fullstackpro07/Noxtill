@@ -80,7 +80,9 @@ describe('BranchManagementService (UPD-BE-036 follow-up)', () => {
     });
     // Temp passwords are stored as Argon2id like every other password (auth security spec §7.1).
     expect(user.passwordHash).toMatch(/^\$argon2id\$/);
-    expect(await verifyPassword(user.passwordHash, result.tempPassword!)).toBe(true);
+    expect(await verifyPassword(user.passwordHash, result.tempPassword!)).toBe(
+      true,
+    );
   });
 
   it('inherits the parent business real configured working hours for a new branch, when it has any', async () => {
