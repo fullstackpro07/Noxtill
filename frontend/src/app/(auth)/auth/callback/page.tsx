@@ -3,39 +3,51 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api-client";
-import { completeOAuthSignup, exchangeOAuthCode, verifyTwoFactorLogin, type AuthTokens, type Pending2fa, type SocialProvider } from "@/lib/auth-api";
+import { completeOAuthSignup, confirmOAuthLink, exchangeOAuthCode, type OAuthExchangeResult, type SignInStep, type SocialProvider } from "@/lib/auth-api";
 import { ArrowRight, AuthCard, C, FieldLabel, FormError, LogoN, PrimaryButton, Subtitle, TextField, Title } from "@/components/auth-flow/auth-ui";
 import { OtpInput } from "@/components/auth-flow/otp-input";
+import { SignInSteps } from "@/components/auth-flow/sign-in-steps";
 import { establishSession } from "@/components/auth-flow/session";
 
 const LABEL: Record<SocialProvider, string> = { google: "Google", microsoft: "Microsoft", facebook: "Facebook" };
 
 type Step =
   | { kind: "loading" }
-  | { kind: "twoFactor"; tempToken: string }
-  | { kind: "email"; ticket: string; provider: SocialProvider; name: string | null };
+  | { kind: "signin"; step: Exclude<SignInStep, { status: "authenticated" }> }
+  | { kind: "email"; ticket: string; provider: SocialProvider; name: string | null }
+  | { kind: "confirm"; ticket: string; provider: SocialProvider; email: string };
 
 /**
  * Provider sign-in lands here with a one-time handoff code (`?code=`) — never tokens. The code is
- * exchanged over HTTPS for the normal Noxtill session, the WhatsApp 2FA step, or an "add your
- * email" step when the provider didn't share one.
+ * exchanged over HTTPS; the outcome is the session (HttpOnly cookies), a second-factor step, an
+ * "add your email" step, or an emailed code that proves the mailbox before a provider is linked
+ * to an existing account (auth security spec §3.1).
  */
 export default function AuthCallbackPage() {
   const router = useRouter();
   const ran = useRef(false);
   const [step, setStep] = useState<Step>({ kind: "loading" });
-  const [code2fa, setCode2fa] = useState("");
-  const [email, setEmail] = useState("");
+  const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function finish(result: AuthTokens | Pending2fa) {
-    if ("pending2fa" in result) {
-      setStep({ kind: "twoFactor", tempToken: result.tempToken });
-      setBusy(false);
+  async function handle(result: OAuthExchangeResult) {
+    setValue("");
+    setError(null);
+    setBusy(false);
+    if (result.status === "authenticated") {
+      router.replace(await establishSession(result));
       return;
     }
-    router.replace(await establishSession(result));
+    if (result.status === "needs_email") {
+      setStep({ kind: "email", ticket: result.ticket, provider: result.provider, name: result.name });
+      return;
+    }
+    if (result.status === "confirm_link") {
+      setStep({ kind: "confirm", ticket: result.ticket, provider: result.provider, email: result.email });
+      return;
+    }
+    setStep({ kind: "signin", step: result });
   }
 
   useEffect(() => {
@@ -51,13 +63,7 @@ export default function AuthCallbackPage() {
       return;
     }
     exchangeOAuthCode(handoff)
-      .then((r) => {
-        if ("needsEmail" in r) {
-          setStep({ kind: "email", ticket: r.ticket, provider: r.provider, name: r.name });
-          return;
-        }
-        return finish(r);
-      })
+      .then(handle)
       .catch((err) => {
         const code = err instanceof ApiError && err.code === "SIGN_IN_EXPIRED" ? "sign_in_expired" : "provider_exchange";
         router.replace(`/login?error=${code}`);
@@ -65,46 +71,56 @@ export default function AuthCallbackPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  async function submitTwoFactor(value: string) {
-    if (step.kind !== "twoFactor" || busy || value.length !== 6) return;
+  async function submit(fn: () => Promise<OAuthExchangeResult>) {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const tokens = await verifyTwoFactorLogin({ tempToken: step.tempToken, code: value });
-      router.replace(await establishSession(tokens));
+      await handle(await fn());
     } catch (err) {
       setBusy(false);
-      setCode2fa("");
+      setValue("");
       setError(err instanceof ApiError ? err.message : "Something went wrong — please try again.");
     }
   }
 
-  async function submitEmail(e: React.FormEvent) {
-    e.preventDefault();
-    if (step.kind !== "email" || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await finish(await completeOAuthSignup(step.ticket, email.trim()));
-    } catch (err) {
-      setBusy(false);
-      setError(err instanceof ApiError ? err.message : "Something went wrong — please try again.");
-    }
-  }
+  const back = (
+    <button
+      type="button"
+      onClick={() => router.replace("/login")}
+      style={{ width: "100%", border: 0, background: "transparent", padding: "18px 6px 0", cursor: "pointer", fontSize: 15, fontWeight: 600, color: C.slate }}
+    >
+      Back to login
+    </button>
+  );
 
-  if (step.kind === "twoFactor") {
+  if (step.kind === "signin") {
     return (
       <AuthCard>
         <LogoN />
         <Title>Two-step verification</Title>
-        <Subtitle>We sent a 6-digit code to your phone on WhatsApp to finish signing in.</Subtitle>
-        <OtpInput value={code2fa} onChange={setCode2fa} onComplete={submitTwoFactor} disabled={busy} invalid={Boolean(error)} />
+        <SignInSteps step={step.step} onResult={handle} onBack={() => router.replace("/login")} />
+      </AuthCard>
+    );
+  }
+
+  if (step.kind === "confirm") {
+    const label = LABEL[step.provider];
+    return (
+      <AuthCard>
+        <LogoN />
+        <Title>Confirm it’s you</Title>
+        <Subtitle>
+          A Noxtill account already uses this email. To connect {label}, enter the 6-digit code we sent to <strong>{step.email}</strong>.
+        </Subtitle>
+        <OtpInput value={value} onChange={setValue} onComplete={(v) => submit(() => confirmOAuthLink(step.ticket, v))} disabled={busy} invalid={Boolean(error)} />
         <div style={{ height: 16 }} />
         <FormError message={error} />
-        <PrimaryButton onClick={() => submitTwoFactor(code2fa)} disabled={busy || code2fa.length !== 6}>
-          {busy ? "Verifying…" : "Verify & log in"}
+        <PrimaryButton onClick={() => submit(() => confirmOAuthLink(step.ticket, value))} disabled={busy || value.length !== 6}>
+          {busy ? "Verifying…" : `Connect ${label}`}
           <ArrowRight />
         </PrimaryButton>
+        {back}
       </AuthCard>
     );
   }
@@ -116,24 +132,24 @@ export default function AuthCallbackPage() {
         <LogoN />
         <Title>Add your email</Title>
         <Subtitle>
-          {label} didn&apos;t share an email address{step.name ? ` for ${step.name}` : ""}. Add one to create your Noxtill account — we&apos;ll send a code to confirm it.
+          {label} didn&apos;t share an email address{step.name ? ` for ${step.name}` : ""}. Add one to continue — we&apos;ll send a code to confirm it.
         </Subtitle>
-        <form onSubmit={submitEmail} noValidate>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit(() => completeOAuthSignup(step.ticket, value.trim()));
+          }}
+          noValidate
+        >
           <FieldLabel htmlFor="email">Work email</FieldLabel>
-          <TextField id="email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} style={{ marginBottom: 16 }} autoFocus />
+          <TextField id="email" type="email" autoComplete="email" placeholder="you@company.com" value={value} onChange={(e) => setValue(e.target.value)} style={{ marginBottom: 16 }} autoFocus />
           <FormError message={error} />
-          <PrimaryButton type="submit" disabled={busy || !email.includes("@")}>
-            {busy ? "Creating your account…" : "Continue"}
+          <PrimaryButton type="submit" disabled={busy || !value.includes("@")}>
+            {busy ? "Continuing…" : "Continue"}
             <ArrowRight />
           </PrimaryButton>
         </form>
-        <button
-          type="button"
-          onClick={() => router.replace("/login")}
-          style={{ width: "100%", border: 0, background: "transparent", padding: "18px 6px 0", cursor: "pointer", fontSize: 15, fontWeight: 600, color: C.slate }}
-        >
-          Back to login
-        </button>
+        {back}
       </AuthCard>
     );
   }

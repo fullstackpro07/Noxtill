@@ -6,7 +6,7 @@ import {
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import { apiFetch } from "@/lib/api-client";
-import type { AuthTokens, PasskeyView, Pending2fa } from "@/lib/auth-api";
+import type { PasskeyView, SignInStep } from "@/lib/auth-api";
 
 /**
  * Passkeys via the browser WebAuthn API. The browser/OS picks the authenticator (Face ID, Touch ID,
@@ -22,14 +22,28 @@ export function isPasskeyCancel(err: unknown): boolean {
   return name === "NotAllowedError" || name === "AbortError";
 }
 
-export async function signInWithPasskey(): Promise<AuthTokens | Pending2fa> {
-  const { challengeId, options } = await apiFetch<{ challengeId: string; options: PublicKeyCredentialRequestOptionsJSON }>(
+type Options = { challengeId: string; options: PublicKeyCredentialRequestOptionsJSON };
+
+/** Usernameless sign-in — or, with `ticket`, the second-factor step of a sign-in. */
+export async function signInWithPasskey(ticket?: string): Promise<SignInStep> {
+  const { challengeId, options } = await apiFetch<Options>(
     "/auth/passkeys/authenticate/options",
-    { method: "POST", body: "{}" },
+    { method: "POST", body: JSON.stringify(ticket ? { ticket } : {}) },
     { skipAuth: true },
   );
   const response = await startAuthentication({ optionsJSON: options });
-  return apiFetch("/auth/passkeys/authenticate/verify", { method: "POST", body: JSON.stringify({ challengeId, response }) }, { skipAuth: true });
+  return apiFetch(
+    "/auth/passkeys/authenticate/verify",
+    { method: "POST", body: JSON.stringify({ challengeId, response, ...(ticket ? { ticket } : {}) }) },
+    { skipAuth: true },
+  );
+}
+
+/** Step-up re-authentication with a passkey (billing, payroll, exports). */
+export async function stepUpWithPasskey(): Promise<{ validUntil: string }> {
+  const { challengeId, options } = await apiFetch<Options>("/auth/passkeys/step-up/options", { method: "POST", body: "{}" });
+  const response = await startAuthentication({ optionsJSON: options });
+  return apiFetch("/auth/passkeys/step-up/verify", { method: "POST", body: JSON.stringify({ challengeId, response }) });
 }
 
 /** `password` only when the server asks for fresh authentication (REAUTH_REQUIRED). */

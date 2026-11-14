@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { FinAccount, Prisma, Role } from '@prisma/client';
 import { randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../auth/security/password.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CAPABILITIES } from '../common/capabilities/capabilities.constants';
@@ -596,7 +596,7 @@ export class FinanceSettingsService {
           data: {
             name: dto.name.trim().slice(0, 120),
             email,
-            passwordHash: await bcrypt.hash(tempPassword, 10),
+            passwordHash: await hashPassword(tempPassword),
           },
         });
       }

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { RequireStepUp } from '../common/decorators/require-step-up.decorator';
 import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { DataExportsService } from './data-exports.service';
 import { RequireCapability } from '../common/decorators/require-capability.decorator';
@@ -44,6 +45,7 @@ export class DataExportsController {
     return this.dataExports.preview(this.active(user), dto);
   }
 
+  @RequireStepUp()
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: DataExportDto) {
     return this.dataExports.create(this.active(user), user.sub, dto);
@@ -54,6 +56,7 @@ export class DataExportsController {
     return this.dataExports.detail(this.active(user), id);
   }
 
+  @RequireStepUp()
   @Post(':id/download')
   download(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.dataExports.download(this.active(user), user.sub, id);

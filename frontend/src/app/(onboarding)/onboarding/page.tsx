@@ -9,16 +9,16 @@ import { OnboardingFlow } from "@/components/onboarding-flow/onboarding-flow";
 export default function OnboardingPage() {
   const router = useRouter();
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     if (!hasHydrated) return;
-    if (!accessToken || !user) router.replace("/login?next=/onboarding");
+    if (!isAuthenticated || !user) router.replace("/login?next=/onboarding");
     else if (user.emailVerified === false) router.replace("/check-email");
     else if (user.role !== "owner") router.replace("/dashboard");
-  }, [hasHydrated, accessToken, user, router]);
+  }, [hasHydrated, isAuthenticated, user, router]);
 
-  if (!hasHydrated || !accessToken || !user || user.role !== "owner") return null;
+  if (!hasHydrated || !isAuthenticated || !user || user.role !== "owner") return null;
   return <OnboardingFlow />;
 }

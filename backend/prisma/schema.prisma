@@ -1080,7 +1080,27 @@ model User {
   /// UPD-BE-040: WhatsApp-OTP two-factor. Replaces the old single `refreshTokenHash` column —
   /// each login now creates its own `Session` row instead of overwriting one shared hash, which
   /// also fixes the pre-existing "logging in on a second device silently kills the first" bug.
+  /// Auth security spec §7.3: true when the user has a second factor independent of email — an
+  /// authenticator app (TOTP) or at least one active passkey. Kept in sync by MfaService. (The old
+  /// WhatsApp code 2FA was retired: a phone number is not an authentication factor, spec §6.2.)
   twoFactorEnabled     Boolean   @default(false) @map("two_factor_enabled")
+  /// Owners (and anyone who had WhatsApp 2FA) must enrol TOTP or a passkey before using the app.
+  mfaRequired          Boolean   @default(false) @map("mfa_required")
+  /// TOTP secret, AES-256-GCM encrypted at rest (never the plaintext).
+  totpSecretEnc        String?   @map("totp_secret_enc") @db.Text
+  totpEnabledAt        DateTime? @map("totp_enabled_at")
+  /// Last accepted TOTP time-step — a code can never be replayed.
+  totpLastStep         Int?      @map("totp_last_step")
+  /// Peppered HMACs of single-use recovery codes (string[]).
+  recoveryCodes        Json      @default("[]") @map("recovery_codes")
+  /// False for accounts created by a provider (their random password is unknown to anyone).
+  hasPassword          Boolean   @default(true) @map("has_password")
+  /// Set when the password must be replaced before sign-in (breached, or destroyed by §3.2).
+  mustReset            Boolean   @default(false) @map("must_reset")
+  /// Opaque 64-byte WebAuthn user handle (base64url) — never the email or the user id (§5.1).
+  webauthnUserId       String?   @unique @map("webauthn_user_id") @db.VarChar(96)
+  /// Email OTP lock after 5 wrong codes (§6.1): no code for this address is accepted until then.
+  otpLockedUntil       DateTime? @map("otp_locked_until")
   /// Per-user interface preferences (motion, text size, notification sounds) the app applies.
   uiPreferences        Json      @default("{}") @map("ui_preferences")
   /// Auth & Onboarding: set when the owner clicks the emailed confirmation link (or signs in with a
@@ -1112,6 +1132,7 @@ model User {
   authTokens                    AuthToken[]
   authIdentities                AuthIdentity[]
   passkeyCredentials            PasskeyCredential[]
+  knownDevices                  KnownDevice[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1131,6 +1152,10 @@ model AuthIdentity {
   /// True only when the provider gave a reliable verification claim (Google `email_verified`).
   providerEmailVerified Boolean   @default(false) @map("provider_email_verified")
   providerDisplayName   String?   @map("provider_display_name") @db.VarChar(191)
+  /// Microsoft `tid` (needed later for Enterprise SSO and tenant allowlisting).
+  tenantId              String?   @map("tenant_id") @db.VarChar(64)
+  /// Set when the user removed Noxtill from their Facebook settings (deauthorize callback).
+  disabledAt            DateTime? @map("disabled_at")
   createdAt             DateTime  @default(now()) @map("created_at")
   lastUsedAt            DateTime? @map("last_used_at")
 
@@ -1184,6 +1209,9 @@ model PasskeyCredential {
   /// singleDevice | multiDevice
   deviceType   String    @map("device_type") @db.VarChar(16)
   backedUp     Boolean   @default(false) @map("backed_up")
+  aaguid       String?   @db.VarChar(36)
+  /// Disabled after a signature-counter regression (possible clone, §5.3).
+  disabledAt   DateTime? @map("disabled_at")
   label        String    @db.VarChar(64)
   createdAt    DateTime  @default(now()) @map("created_at")
   lastUsedAt   DateTime? @map("last_used_at")
@@ -1310,17 +1338,85 @@ model Session {
   user             User      @relation(fields: [userId], references: [id])
   businessId       String    @map("business_id")
   business         Business  @relation(fields: [businessId], references: [id])
+  /// Legacy (JWT era). Refresh tokens now live in `refresh_tokens`, one family per session.
   refreshTokenHash String    @map("refresh_token_hash")
   userAgent        String?   @map("user_agent")
   ipAddress        String?   @map("ip_address")
   lastUsedAt       DateTime  @default(now()) @map("last_used_at")
   revokedAt        DateTime? @map("revoked_at")
+  /// SHA-256 of the current opaque access token (rotated on every refresh).
+  accessTokenHash  String?   @unique @map("access_token_hash") @db.VarChar(64)
+  accessExpiresAt  DateTime? @map("access_expires_at")
+  /// { role, customRoleId, capabilities } resolved at issue/refresh time.
+  claims           Json?
+  /// "Remember me" off = shared device: 15-minute idle, 12-hour absolute lifetime (§8.5).
+  sharedDevice     Boolean   @default(false) @map("shared_device")
+  absoluteExpiresAt DateTime? @map("absolute_expires_at")
+  /// Last step-up re-authentication (valid 10 minutes for billing, payroll and exports).
+  stepUpAt         DateTime? @map("step_up_at")
+  /// Owner without a second factor: only MFA enrolment routes are allowed until it is set up.
+  mfaSetupRequired Boolean   @default(false) @map("mfa_setup_required")
+  /// How this session was established (password | google | microsoft | facebook | passkey).
+  method           String?   @db.VarChar(16)
+  country          String?   @db.VarChar(8)
+  refreshTokens    RefreshToken[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId])
   @@index([businessId])
   @@map("sessions")
+}
+
+/// Rotating refresh tokens (§8.3). All tokens of one session form a family; presenting a consumed
+/// token means it was stolen, and the whole family and every session of the user are revoked.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  sessionId  String    @map("session_id")
+  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(64)
+  consumedAt DateTime? @map("consumed_at")
+  expiresAt  DateTime  @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([sessionId])
+  @@map("refresh_tokens")
+}
+
+/// Browsers a user has signed in from (HMAC of the HttpOnly device cookie). An unknown device needs
+/// an emailed code at password sign-in and triggers a new-device alert (§7.3 decision, §8.4).
+model KnownDevice {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceHash String   @map("device_hash") @db.VarChar(64)
+  userAgent  String?  @map("user_agent") @db.Text
+  firstSeen  DateTime @default(now()) @map("first_seen")
+  lastSeen   DateTime @default(now()) @map("last_seen")
+
+  @@unique([userId, deviceHash])
+  @@map("known_devices")
+}
+
+/// Fixed-window rate-limit counters (§10.1), keyed per account and per IP.
+model AuthRateBucket {
+  key         String   @id @db.VarChar(191)
+  windowStart DateTime @map("window_start")
+  count       Int      @default(0)
+
+  @@map("auth_rate_buckets")
+}
+
+/// Meta "data deletion request" callbacks for Facebook Login (§4.3).
+model FacebookDeletionRequest {
+  id               String    @id @default(uuid())
+  confirmationCode String    @unique @map("confirmation_code") @db.VarChar(32)
+  facebookUserId   String    @map("facebook_user_id") @db.VarChar(64)
+  status           String    @db.VarChar(16)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  completedAt      DateTime? @map("completed_at")
+
+  @@map("facebook_deletion_requests")
 }
 
 /// UPD-BE-040. A short-lived, single-use WhatsApp-delivered code — used both to confirm 2FA

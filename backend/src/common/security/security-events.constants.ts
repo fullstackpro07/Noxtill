@@ -39,6 +39,23 @@ export const SECURITY_EVENT_TYPES = {
   IDENTITY_UNLINKED: 'identity_unlinked',
   PASSKEY_ADDED: 'passkey_added',
   PASSKEY_REMOVED: 'passkey_removed',
+  // Auth security spec §11 (auth_events): recorded in this same table.
+  OTP_REQUESTED: 'otp_requested',
+  OTP_FAILED: 'otp_failed',
+  OTP_LOCKED: 'otp_locked',
+  PASSWORD_CHANGED: 'password_changed',
+  PASSKEY_COUNTER_REGRESSION: 'passkey_counter_regression',
+  REFRESH_REUSE_DETECTED: 'refresh_reuse_detected',
+  LOGOUT: 'logout',
+  LOGOUT_ALL: 'logout_all',
+  MFA_ENABLED: 'mfa_enabled',
+  MFA_DISABLED: 'mfa_disabled',
+  MFA_FAILED: 'mfa_failed',
+  MFA_RECOVERY_CODE_USED: 'mfa_recovery_code_used',
+  STEP_UP: 'step_up',
+  LOCAL_CREDENTIAL_DESTROYED: 'local_credential_destroyed',
+  AUTH_SPIKE_DETECTED: 'auth_spike_detected',
+  CREDENTIAL_STUFFING_SUSPECTED: 'credential_stuffing_suspected',
 } as const;
 
 export type SecurityEventType =
@@ -71,6 +88,22 @@ export const BASE_SEVERITY: Record<SecurityEventType, SecuritySeverity> = {
   identity_unlinked: 'medium',
   passkey_added: 'medium',
   passkey_removed: 'medium',
+  otp_requested: 'low',
+  otp_failed: 'low',
+  otp_locked: 'high',
+  password_changed: 'medium',
+  passkey_counter_regression: 'critical',
+  refresh_reuse_detected: 'critical',
+  logout: 'low',
+  logout_all: 'medium',
+  mfa_enabled: 'medium',
+  mfa_disabled: 'high',
+  mfa_failed: 'medium',
+  mfa_recovery_code_used: 'high',
+  step_up: 'low',
+  local_credential_destroyed: 'high',
+  auth_spike_detected: 'high',
+  credential_stuffing_suspected: 'critical',
 };
 
 /** Types counted by the REPEATED_FAILURE rule. */
@@ -79,6 +112,8 @@ export const FAILURE_TYPES: SecurityEventType[] = [
   'login_unknown_account',
   'login_provider_failed',
   'two_factor_failed',
+  'otp_failed',
+  'mfa_failed',
   'admin_login_failed',
   'admin_totp_failed',
 ];

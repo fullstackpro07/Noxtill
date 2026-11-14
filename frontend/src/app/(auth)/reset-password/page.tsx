@@ -1,12 +1,15 @@
 "use client";
 
-import { use, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api-client";
 import { fetchResetTokenStatus, resetPassword } from "@/lib/auth-api";
 import { useAuthStore } from "@/store/auth-store";
 import { AuthCard, BackToLogin, C, FieldLabel, FormError, InfoNote, LogoN, PasswordField, PrimaryButton, StrengthMeter, Subtitle, Title } from "@/components/auth-flow/auth-ui";
+
+const MIN = 12;
+const MAX = 128;
 
 function Requirement({ ok, failed, children }: { ok: boolean; failed?: boolean; children: React.ReactNode }) {
   const stroke = failed ? C.danger : ok ? C.active : "#CBD5E1";
@@ -20,40 +23,61 @@ function Requirement({ ok, failed, children }: { ok: boolean; failed?: boolean; 
   );
 }
 
-export default function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ token?: string | string[] }> }) {
-  const raw = use(searchParams).token;
-  const token = (Array.isArray(raw) ? raw[0] : raw) ?? "";
+/**
+ * Reset password (auth security spec §7.4). The token arrives in the emailed link; on landing it is
+ * moved into memory and removed from the URL (served with Referrer-Policy: no-referrer), so it never
+ * sits in browser history or leaks through a Referer header.
+ */
+export default function ResetPasswordPage() {
   const router = useRouter();
+  const [token, setToken] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [reused, setReused] = useState(false);
+  const [breached, setBreached] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const { data: status, isLoading } = useQuery({ queryKey: ["auth", "reset", token], queryFn: () => fetchResetTokenStatus(token), enabled: Boolean(token), retry: false });
 
-  const longEnough = password.length >= 8;
-  const mixed = /[A-Za-z]/.test(password) && /\d/.test(password);
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("token") ?? "";
+    window.history.replaceState(null, "", "/reset-password");
+    // The token only exists in the browser URL, so it can only be read after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setToken(t);
+  }, []);
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["auth", "reset-status"],
+    queryFn: () => fetchResetTokenStatus(token!),
+    enabled: Boolean(token),
+    retry: false,
+  });
+
+  const length = [...password.normalize("NFKC")].length;
+  const longEnough = length >= MIN && length <= MAX;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setReused(false);
-    if (!longEnough || !mixed) return setError("Your new password doesn't meet the requirements below.");
+    setBreached(false);
+    if (!longEnough) return setError(`Use ${MIN}–${MAX} characters.`);
     if (password !== confirm) return setError("The two passwords don't match.");
     setSubmitting(true);
     try {
-      await resetPassword(token, password);
+      await resetPassword(token!, password);
       // Every session was revoked server-side — drop this device's too.
       useAuthStore.getState().clearSession();
       router.push("/login?reset=1");
     } catch (err) {
       setSubmitting(false);
       if (err instanceof ApiError && err.code === "PASSWORD_REUSED") setReused(true);
+      if (err instanceof ApiError && err.code === "PASSWORD_BREACHED") setBreached(true);
       setError(err instanceof ApiError ? err.message : "Something went wrong — please try again.");
     }
   }
 
-  const invalid = !token || (!isLoading && status && !status.valid);
+  const invalid = token === "" || (!isLoading && status && !status.valid);
 
   return (
     <AuthCard>
@@ -61,10 +85,10 @@ export default function ResetPasswordPage({ searchParams }: { searchParams: Prom
       <Title size={30} margin="20px 0 8px">
         Set a new password
       </Title>
-      <Subtitle size={16.5}>Choose a password you haven&apos;t used before.</Subtitle>
+      <Subtitle size={16.5}>A long passphrase is easiest to remember — no symbols or capitals needed.</Subtitle>
       {invalid ? (
         <>
-          <InfoNote tone="danger">This reset link is invalid or has expired. Reset links work once and expire after 30 minutes.</InfoNote>
+          <InfoNote tone="danger">This reset link is invalid or has expired. Reset links work once and expire after 15 minutes.</InfoNote>
           <PrimaryButton onClick={() => router.push("/forgot-password")}>Request a new link</PrimaryButton>
           <div style={{ height: 14 }} />
           <BackToLogin onClick={() => router.push("/login")} />
@@ -77,12 +101,16 @@ export default function ResetPasswordPage({ searchParams }: { searchParams: Prom
           <FieldLabel htmlFor="pw2">Confirm new password</FieldLabel>
           <PasswordField id="pw2" value={confirm} onChange={setConfirm} placeholder="Re-enter new password" marginBottom={20} autoComplete="new-password" invalid={confirm.length > 0 && confirm !== password} />
           <FormError message={error} />
-          <PrimaryButton type="submit" disabled={submitting || isLoading}>
+          <PrimaryButton type="submit" disabled={submitting || isLoading || token === null}>
             {submitting ? "Saving…" : "Reset password"}
           </PrimaryButton>
           <ul style={{ listStyle: "none", padding: 0, margin: "20px 0 0", display: "flex", flexDirection: "column", gap: 9 }}>
-            <Requirement ok={longEnough}>At least 8 characters</Requirement>
-            <Requirement ok={mixed}>One number and one letter</Requirement>
+            <Requirement ok={longEnough}>
+              {MIN}–{MAX} characters
+            </Requirement>
+            <Requirement ok={false} failed={breached}>
+              Not found in a known data breach
+            </Requirement>
             <Requirement ok={false} failed={reused}>
               Not one of your previous passwords
             </Requirement>

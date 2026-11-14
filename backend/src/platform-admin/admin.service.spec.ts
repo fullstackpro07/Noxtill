@@ -5,6 +5,7 @@ describe('AdminService (BE-072)', () => {
   let prisma: PrismaService;
   let service: AdminService;
   const eventIds: string[] = [];
+  let businessId: string;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -18,10 +19,20 @@ describe('AdminService (BE-072)', () => {
       data: { name: 'signup_completed' },
     });
     eventIds.push(started.id, completed.id);
+
+    // Own the data this suite asserts on: a fresh CI database has no businesses at all.
+    const business = await prisma.business.create({
+      data: {
+        name: 'Admin Summary Test Biz',
+        slug: `admin-summary-test-${Date.now()}`,
+      },
+    });
+    businessId = business.id;
   });
 
   afterAll(async () => {
     await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
+    await prisma.business.delete({ where: { id: businessId } });
     await prisma.$disconnect();
   });
 

@@ -5,13 +5,13 @@ import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CapabilitiesService } from '../common/capabilities/capabilities.service';
 import { SessionsService } from './sessions.service';
-import { TwoFactorService } from './two-factor.service';
 import { AuthTokensService } from './auth-tokens.service';
+import { MfaService } from './mfa/mfa.service';
+import { PasswordService } from './security/password.service';
+import { AuthRateLimitService } from './security/auth-rate-limit.service';
 
-describe('AuthService', () => {
-  let service: AuthService;
-
-  beforeEach(async () => {
+describe('AuthService (DI wiring)', () => {
+  it('resolves with its real constructor dependencies', async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -20,15 +20,12 @@ describe('AuthService', () => {
         { provide: ConfigService, useValue: { get: () => undefined } },
         { provide: CapabilitiesService, useValue: {} },
         { provide: SessionsService, useValue: {} },
-        { provide: TwoFactorService, useValue: {} },
+        { provide: MfaService, useValue: {} },
         { provide: AuthTokensService, useValue: {} },
+        { provide: PasswordService, useValue: {} },
+        { provide: AuthRateLimitService, useValue: {} },
       ],
     }).compile();
-
-    service = module.get<AuthService>(AuthService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+    expect(module.get(AuthService)).toBeDefined();
   });
 });

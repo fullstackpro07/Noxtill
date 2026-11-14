@@ -35,15 +35,30 @@ export function googleDef(): OidcProviderDef {
       p.iss === 'accounts.google.com',
     toProfile: (p) => ({
       subject: String(p.sub),
-      email: typeof p.email === 'string' ? p.email.toLowerCase() : undefined,
+      email:
+        typeof p.email === 'string'
+          ? p.email.normalize('NFKC').trim().toLowerCase()
+          : undefined,
       emailVerified: p.email_verified === true,
       name: typeof p.name === 'string' ? p.name : undefined,
     }),
   };
 }
 
-/** `common` = personal Microsoft accounts + work/school accounts (auth spec §4.2). */
-export function microsoftDef(tenant = 'common'): OidcProviderDef {
+/** Microsoft's fixed tenant id for personal (consumer) Microsoft accounts. */
+export const MICROSOFT_CONSUMER_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
+
+/**
+ * `common` = personal Microsoft accounts + work/school accounts (auth spec §4.2). `allowedTenants`
+ * (MICROSOFT_ALLOWED_TENANTS) restricts which `tid`s may sign in at all; empty = any.
+ */
+export function microsoftDef(
+  tenant = 'common',
+  allowedTenants: string[] = [],
+): OidcProviderDef {
+  const allow = allowedTenants
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
   const base = `https://login.microsoftonline.com/${encodeURIComponent(tenant)}`;
   const multiTenant = ['common', 'organizations', 'consumers'].includes(tenant);
   return {
@@ -59,19 +74,25 @@ export function microsoftDef(tenant = 'common'): OidcProviderDef {
       if (!multiTenant && tid.toLowerCase() !== tenant.toLowerCase()) {
         return false;
       }
+      if (allow.length && !allow.includes(tid.toLowerCase())) return false;
       return p.iss === `https://login.microsoftonline.com/${tid}/v2.0`;
     },
-    toProfile: (p) => ({
-      subject: String(p.sub),
-      // Microsoft's `email` claim is optional and not a verified-ownership signal, so Noxtill
-      // runs its own email verification for Microsoft sign-ups (auth spec §6.3).
-      email:
+    toProfile: (p) => {
+      const tid = typeof p.tid === 'string' ? p.tid.toLowerCase() : undefined;
+      // Never `preferred_username` (a UPN, admin-changeable). The `email` claim counts as verified
+      // only for a personal Microsoft account (spec §4.2 rule 5); work/school email is unverified.
+      const email =
         typeof p.email === 'string' && p.email.includes('@')
-          ? p.email.toLowerCase()
-          : undefined,
-      emailVerified: false,
-      name: typeof p.name === 'string' ? p.name : undefined,
-    }),
+          ? p.email.normalize('NFKC').trim().toLowerCase()
+          : undefined;
+      return {
+        subject: String(p.sub),
+        email,
+        emailVerified: !!email && tid === MICROSOFT_CONSUMER_TENANT,
+        name: typeof p.name === 'string' ? p.name : undefined,
+        tenantId: tid,
+      };
+    },
   };
 }
 

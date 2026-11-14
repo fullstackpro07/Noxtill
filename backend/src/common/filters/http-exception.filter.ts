@@ -50,6 +50,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
       );
     }
 
+    // Auth rate limits / lockouts (spec §10.1): 429 always carries Retry-After.
+    const retryAfter = (exception as { retryAfterSeconds?: number })
+      ?.retryAfterSeconds;
+    if (
+      status === 429 &&
+      typeof retryAfter === 'number' &&
+      !response.getHeader('Retry-After')
+    ) {
+      response.setHeader(
+        'Retry-After',
+        String(Math.max(1, Math.ceil(retryAfter))),
+      );
+    }
     response
       .status(status)
       .json({ error: requestId ? { ...body, requestId } : body });

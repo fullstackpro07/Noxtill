@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { MetersService } from '../usage/meters.service';
 import { randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../auth/security/password.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
 import { CreateBranchDto } from './dto/create-branch.dto';
@@ -30,8 +30,6 @@ const COPYABLE_SETTINGS_FIELDS = [
   'branding',
   'acceptedPaymentMethods',
 ] as const satisfies readonly (keyof Prisma.BusinessUpdateInput)[];
-
-const BCRYPT_ROUNDS = 10;
 
 /**
  * Branch CRUD (UPD-BE-036 follow-up) — branches are `Business` rows linked by `parentId`, but
@@ -102,7 +100,7 @@ export class BranchManagementService {
     let user = existingUser;
     if (!user) {
       tempPassword = randomBytes(BRANCH_TEMP_PASSWORD_BYTES).toString('hex');
-      const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+      const passwordHash = await hashPassword(tempPassword);
       user = await this.prisma.user.create({
         data: {
           name: dto.ownerName,

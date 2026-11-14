@@ -12,6 +12,7 @@ import { ApiError } from "@/lib/api-client";
 import { toast } from "@/lib/toast";
 import { fetchIdentities, fetchPasskeys, renamePasskey, removePasskey, startIdentityLink, unlinkIdentity, type PasskeyView, type SocialProvider } from "@/lib/auth-api";
 import { addPasskey, isPasskeyCancel, passkeysSupported } from "@/lib/passkeys";
+import { useAuthStore } from "@/store/auth-store";
 
 const ICONS: Record<SocialProvider, () => React.JSX.Element> = { google: GoogleIcon, microsoft: MicrosoftIcon, facebook: FacebookIcon };
 
@@ -113,8 +114,10 @@ export function SignInMethods() {
                       disabled={busy !== null}
                       onClick={run(`unlink:${p.provider}`, `Disconnect ${p.label}`, async (pw) => {
                         await unlinkIdentity(p.provider, pw);
-                        toast.success(`${p.label} disconnected.`);
-                        refresh();
+                        // Removing a sign-in method signs out every device, this one included (spec §9.3).
+                        useAuthStore.getState().clearSession();
+                        toast.success(`${p.label} disconnected — every device was signed out. Sign in again.`);
+                        window.location.assign("/login");
                       })}
                     >
                       {busy === `unlink:${p.provider}` ? "Disconnecting…" : "Disconnect"}
@@ -171,6 +174,7 @@ export function SignInMethods() {
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-medium text-fg">{k.label}</p>
                       {k.synced && <Badge tone="neutral">Synced</Badge>}
+                      {k.disabled && <Badge tone="danger">Disabled — possible copy</Badge>}
                     </div>
                     <p className="text-xs text-fg-muted">
                       Added {fmt(k.createdAt)} · {k.lastUsedAt ? `last used ${fmt(k.lastUsedAt)}` : "not used yet"}
@@ -187,8 +191,9 @@ export function SignInMethods() {
                       disabled={busy !== null}
                       onClick={run(`remove:${k.id}`, `Remove ${k.label}`, async (pw) => {
                         await removePasskey(k.id, pw);
-                        toast.success("Passkey removed.");
-                        refresh();
+                        useAuthStore.getState().clearSession();
+                        toast.success("Passkey removed — every device was signed out. Sign in again.");
+                        window.location.assign("/login");
                       })}
                     >
                       <Trash2 className="h-4 w-4" aria-hidden />

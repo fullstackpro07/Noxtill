@@ -1,409 +1,207 @@
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException } from '@nestjs/common';
-import { AuthTokensService } from './auth-tokens.service';
-import { AuthMailerService } from './auth-mailer.service';
-import { AuthService } from './auth.service';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppException } from '../common/filters/app.exception';
-import { CapabilitiesService } from '../common/capabilities/capabilities.service';
-import { SessionsService } from './sessions.service';
-import { TwoFactorService } from './two-factor.service';
-import type { SendGateService } from '../messaging/send-gate.service';
+import type { AuthenticatedUser } from '../common/tenancy/auth-context';
+import {
+  buildAuthKit,
+  cleanupUsers,
+  resetRateLimits,
+  type AuthKit,
+} from './testing/auth-test-kit';
+import type { LoginOutcome } from './auth.service';
 
-describe('AuthService integration (BE-007)', () => {
-  let prisma: PrismaService;
-  let authService: AuthService;
-  const testEmail = `auth-test-${Date.now()}@example.com`;
+process.env.AUTH_SKIP_EMAIL_VERIFICATION = 'false';
 
-  beforeAll(async () => {
-    prisma = new PrismaService();
-    await prisma.$connect();
+const codeOf = (p: Promise<unknown>) =>
+  p.then(
+    () => 'resolved',
+    (e: unknown) =>
+      e instanceof AppException
+        ? (e.getResponse() as { code: string }).code
+        : (e as Error).message,
+  );
+const authed = (o: LoginOutcome) =>
+  o as Extract<LoginOutcome, { status: 'authenticated' }>;
 
-    const config = new ConfigService({
-      JWT_SECRET: 'test-secret',
-      JWT_REFRESH_SECRET: 'test-refresh-secret',
-      JWT_ACCESS_TTL: '15m',
-      JWT_REFRESH_TTL: '7d',
-      LOGIN_MAX_ATTEMPTS: 3,
-      LOGIN_LOCK_MINUTES: 15,
-    });
-    const jwt = new JwtService();
-    const sessions = new SessionsService(prisma);
-    const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
-    const twoFactor = new TwoFactorService(
-      prisma,
-      sendGate as unknown as SendGateService,
-    );
-
-    authService = new AuthService(
-      prisma,
-      jwt,
-      config,
-      new CapabilitiesService(prisma),
-      sessions,
-      twoFactor,
-      new AuthTokensService(prisma, new AuthMailerService(config)),
-    );
-  });
-
-  afterAll(async () => {
-    const user = await prisma.user.findFirst({ where: { email: testEmail } });
-    if (user) {
-      await prisma.session.deleteMany({ where: { userId: user.id } });
-      await prisma.businessUser.deleteMany({ where: { userId: user.id } });
-      const business = await prisma.businessUser.findFirst({
-        where: { userId: user.id },
-      });
-      await prisma.user.delete({ where: { id: user.id } });
-      if (business) {
-        await prisma.business
-          .deleteMany({ where: { id: business.businessId } })
-          .catch(() => undefined);
-      }
-    }
-    await prisma.$disconnect();
-  });
-
-  it('signup creates business + owner user and issues tokens', async () => {
-    const result = await authService.signup({
-      businessName: 'Auth Test Biz',
-      name: 'Test Owner',
-      email: testEmail,
-      password: 'supersecret123',
-    });
-
-    expect(result.accessToken).toBeDefined();
-    expect(result.refreshToken).toBeDefined();
-    expect(result.user.email).toBe(testEmail);
-
-    // Public booking depth fix — a real signup must not leave `workingHours` at the schema's
-    // empty-object default, or the business's public booking link is permanently broken (every
-    // date shows zero slots) until someone finds the working-hours settings screen.
-    const business = await prisma.business.findUniqueOrThrow({
-      where: { id: result.business.id },
-    });
-    expect(business.workingHours).not.toEqual({});
-    expect(business.workingHours).toMatchObject({ mon: [['09:00', '17:00']] });
-  });
-
-  it('rejects signup with a duplicate email', async () => {
-    await expect(
-      authService.signup({
-        businessName: 'Dup Biz',
-        name: 'Dup Owner',
-        email: testEmail,
-        password: 'supersecret123',
-      }),
-    ).rejects.toBeInstanceOf(AppException);
-  });
-
-  it('logs in with correct credentials', async () => {
-    const result = await authService.login({
-      emailOrPhone: testEmail,
-      password: 'supersecret123',
-    });
-    if (!('accessToken' in result)) {
-      throw new Error('Expected full tokens, got a pending-2FA response');
-    }
-    expect(result.accessToken).toBeDefined();
-  });
-
-  it('rejects wrong password and locks the account after max attempts', async () => {
-    await expect(
-      authService.login({ emailOrPhone: testEmail, password: 'wrong-1' }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(
-      authService.login({ emailOrPhone: testEmail, password: 'wrong-2' }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(
-      authService.login({ emailOrPhone: testEmail, password: 'wrong-3' }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-
-    // 4th attempt: account is now locked, even with the correct password.
-    await expect(
-      authService.login({
-        emailOrPhone: testEmail,
-        password: 'supersecret123',
-      }),
-    ).rejects.toBeInstanceOf(AppException);
-  });
-});
-
-describe('AuthService — deactivated branch blocks login/refresh (Branches depth fix, UPD-INT-012)', () => {
-  let prisma: PrismaService;
-  let authService: AuthService;
-  let userId: string;
-  let businessId: string;
-  const email = `auth-deactivated-test-${Date.now()}@example.com`;
-
-  beforeAll(async () => {
-    prisma = new PrismaService();
-    await prisma.$connect();
-
-    const config = new ConfigService({
-      JWT_SECRET: 'test-secret',
-      JWT_REFRESH_SECRET: 'test-refresh-secret',
-      JWT_ACCESS_TTL: '15m',
-      JWT_REFRESH_TTL: '7d',
-    });
-    const jwt = new JwtService();
-    const sessions = new SessionsService(prisma);
-    const sendGate = { send: jest.fn().mockResolvedValue(undefined) };
-    const twoFactor = new TwoFactorService(
-      prisma,
-      sendGate as unknown as SendGateService,
-    );
-    authService = new AuthService(
-      prisma,
-      jwt,
-      config,
-      new CapabilitiesService(prisma),
-      sessions,
-      twoFactor,
-      new AuthTokensService(prisma, new AuthMailerService(config)),
-    );
-
-    const signup = await authService.signup({
-      businessName: 'Deactivated Login Test Biz',
-      name: 'Test Owner',
-      email,
-      password: 'supersecret123',
-    });
-    userId = signup.user.id;
-    businessId = signup.business.id;
-  });
-
-  afterAll(async () => {
-    await prisma.session.deleteMany({ where: { userId } });
-    await prisma.businessUser.deleteMany({ where: { userId } });
-    await prisma.user.delete({ where: { id: userId } });
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=0');
-      await tx.business.delete({ where: { id: businessId } });
-      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS=1');
-    });
-    await prisma.$disconnect();
-  });
-
-  it('logs in fine while the business is active, is refused once deactivated, and works again once reactivated', async () => {
-    const first = await authService.login({
-      emailOrPhone: email,
-      password: 'supersecret123',
-    });
-    if (!('accessToken' in first)) throw new Error('Expected full tokens');
-    expect(first.accessToken).toBeDefined();
-
-    await prisma.business.update({
-      where: { id: businessId },
-      data: { active: false },
-    });
-
-    await expect(
-      authService.login({ emailOrPhone: email, password: 'supersecret123' }),
-    ).rejects.toBeInstanceOf(AppException);
-
-    await prisma.business.update({
-      where: { id: businessId },
-      data: { active: true },
-    });
-
-    const third = await authService.login({
-      emailOrPhone: email,
-      password: 'supersecret123',
-    });
-    if (!('accessToken' in third)) throw new Error('Expected full tokens');
-    expect(third.accessToken).toBeDefined();
-  });
-
-  it('refuses to refresh an already-issued token once its business is deactivated', async () => {
-    const login = await authService.login({
-      emailOrPhone: email,
-      password: 'supersecret123',
-    });
-    if (!('refreshToken' in login)) throw new Error('Expected full tokens');
-
-    await prisma.business.update({
-      where: { id: businessId },
-      data: { active: false },
-    });
-
-    await expect(
-      authService.refresh(login.refreshToken),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-
-    await prisma.business.update({
-      where: { id: businessId },
-      data: { active: true },
-    });
-  });
-});
-
-describe('AuthService — sessions + 2FA (UPD-BE-040)', () => {
-  let prisma: PrismaService;
-  let authService: AuthService;
-  let jwt: JwtService;
-  const testEmail = `auth-2fa-test-${Date.now()}@example.com`;
-  const testPhone = `+1${Date.now()}9`;
-  const sendGate = {
-    send: jest
-      .fn<Promise<void>, [Record<string, unknown>]>()
-      .mockResolvedValue(undefined),
+/** Core sign-in behaviour on real MySQL (BE-007, UPD-BE-040, UPD-INT-012) on opaque sessions. */
+describe('AuthService integration', () => {
+  const ts = Date.now();
+  const prefix = `authint-${ts}-`;
+  const mail = (t: string) => `${prefix}${t}@example.com`;
+  const PASSWORD = 'a long enough passphrase';
+  const meta = {
+    ipAddress: '192.0.2.10',
+    userAgent: 'jest',
+    deviceId: `dev-${ts}`,
   };
+  let prisma: PrismaService;
+  let kit: AuthKit;
 
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-
-    const config = new ConfigService({
-      JWT_SECRET: 'test-secret-2fa',
-      JWT_REFRESH_SECRET: 'test-refresh-secret-2fa',
-      JWT_ACCESS_TTL: '15m',
-      JWT_REFRESH_TTL: '7d',
-    });
-    jwt = new JwtService();
-    const sessions = new SessionsService(prisma);
-    const twoFactor = new TwoFactorService(
-      prisma,
-      sendGate as unknown as SendGateService,
-    );
-
-    authService = new AuthService(
-      prisma,
-      jwt,
-      config,
-      new CapabilitiesService(prisma),
-      sessions,
-      twoFactor,
-      new AuthTokensService(prisma, new AuthMailerService(config)),
-    );
-  });
-
-  afterEach(() => {
-    sendGate.send.mockClear();
+    await resetRateLimits(prisma);
+    kit = buildAuthKit(prisma);
   });
 
   afterAll(async () => {
-    const user = await prisma.user.findFirst({ where: { email: testEmail } });
-    if (user) {
-      await prisma.twoFactorCode.deleteMany({ where: { userId: user.id } });
-      await prisma.session.deleteMany({ where: { userId: user.id } });
-      await prisma.businessUser.deleteMany({ where: { userId: user.id } });
-      const business = await prisma.businessUser.findFirst({
-        where: { userId: user.id },
-      });
-      await prisma.user.delete({ where: { id: user.id } });
-      if (business) {
-        await prisma.business
-          .deleteMany({ where: { id: business.businessId } })
-          .catch(() => undefined);
-      }
-    }
+    await cleanupUsers(prisma, prefix);
     await prisma.$disconnect();
   });
 
-  function lastSentCode(): string {
-    const call = sendGate.send.mock.calls[sendGate.send.mock.calls.length - 1];
-    return (call[0].variables as Record<string, string>).code;
+  async function verified(tag: string) {
+    const res = await kit.auth.signup(
+      { email: mail(tag), password: PASSWORD },
+      meta,
+    );
+    await prisma.user.update({
+      where: { id: res.user.id },
+      data: { emailVerifiedAt: new Date(), mfaRequired: false },
+    });
+    await prisma.businessUser.updateMany({
+      where: { userId: res.user.id },
+      data: { role: 'manager' },
+    });
+    return res;
   }
 
-  it('two real concurrent logins get two real, independent sessions', async () => {
-    await authService.signup({
-      businessName: '2FA Test Biz',
-      name: 'Test Owner',
-      email: testEmail,
-      phone: testPhone,
-      password: 'supersecret123',
-    });
-
-    const first = await authService.login({
-      emailOrPhone: testEmail,
-      password: 'supersecret123',
-    });
-    const second = await authService.login({
-      emailOrPhone: testEmail,
-      password: 'supersecret123',
-    });
-    if (!('refreshToken' in first) || !('refreshToken' in second)) {
-      throw new Error('Expected full tokens');
-    }
-
-    // Refreshing the FIRST session must still work — logging in again no longer kills it
-    // (the pre-existing single-shared-hash bug this ticket fixes).
-    await expect(
-      authService.refresh(first.refreshToken),
-    ).resolves.toBeDefined();
-    await expect(
-      authService.refresh(second.refreshToken),
-    ).resolves.toBeDefined();
-  });
-
-  it('enable -> confirm real 2FA, then a real login requires the real code', async () => {
-    const user = await prisma.user.findFirstOrThrow({
-      where: { email: testEmail },
-    });
-    const businessUser = await prisma.businessUser.findFirstOrThrow({
-      where: { userId: user.id },
-    });
-
-    await authService.enableTwoFactor(user.id, businessUser.businessId);
-    const enableCode = lastSentCode();
-    await authService.confirmTwoFactor(user.id, enableCode);
-
-    const refreshed = await prisma.user.findUniqueOrThrow({
-      where: { id: user.id },
-    });
-    expect(refreshed.twoFactorEnabled).toBe(true);
-
-    // Login now returns a pending-2FA response, never full tokens directly.
-    const loginResult = await authService.login({
-      emailOrPhone: testEmail,
-      password: 'supersecret123',
-    });
-    if (!('pending2fa' in loginResult)) {
-      throw new Error('Expected a pending-2FA response');
-    }
-    expect(loginResult.pending2fa).toBe(true);
-
-    const loginCode = lastSentCode();
-    const verified = await authService.verifyTwoFactorLogin(
-      loginResult.tempToken,
-      loginCode,
+  it('signup creates a business, an owner who must enrol MFA, and an opaque session', async () => {
+    const res = await kit.auth.signup(
+      { email: mail('signup'), password: PASSWORD },
+      meta,
     );
-    expect(verified.accessToken).toBeDefined();
-
-    // Disabling requires the real password.
-    await expect(
-      authService.disableTwoFactor(user.id, 'wrong-password'),
-    ).rejects.toBeInstanceOf(AppException);
-    await authService.disableTwoFactor(user.id, 'supersecret123');
-    const disabled = await prisma.user.findUniqueOrThrow({
-      where: { id: user.id },
+    expect(res.tokens.accessToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(res.tokens.refreshToken).not.toBe(res.tokens.accessToken);
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: res.user.id },
     });
-    expect(disabled.twoFactorEnabled).toBe(false);
+    expect(user.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(user.mfaRequired).toBe(true);
+    const session = await prisma.session.findUniqueOrThrow({
+      where: { id: res.tokens.sessionId },
+    });
+    expect(session.mfaSetupRequired).toBe(true);
+    // Only hashes are stored.
+    expect(session.accessTokenHash).not.toBe(res.tokens.accessToken);
   });
 
-  it('logout revokes only the current session, not every device', async () => {
-    const first = await authService.login({
-      emailOrPhone: testEmail,
-      password: 'supersecret123',
+  it('rejects a duplicate email and a weak password', async () => {
+    expect(
+      await codeOf(
+        kit.auth.signup({ email: mail('signup'), password: PASSWORD }, meta),
+      ),
+    ).toBe('ACCOUNT_EXISTS');
+    expect(
+      await codeOf(
+        kit.auth.signup({ email: mail('weak'), password: 'short' }, meta),
+      ),
+    ).toBe('WEAK_PASSWORD');
+  });
+
+  it('logs in with correct credentials on a known device; wrong password is a plain 401', async () => {
+    await verified('login');
+    expect(
+      (
+        await kit.auth.login(
+          { emailOrPhone: mail('login'), password: PASSWORD },
+          meta,
+        )
+      ).status,
+    ).toBe('authenticated');
+    expect(
+      await codeOf(
+        kit.auth.login(
+          { emailOrPhone: mail('login'), password: 'not the password' },
+          meta,
+        ),
+      ),
+    ).toBe('Invalid credentials');
+  });
+
+  it('upgrades a legacy bcrypt hash to Argon2id on the next successful sign-in', async () => {
+    const res = await verified('legacy');
+    await prisma.user.update({
+      where: { id: res.user.id },
+      data: { passwordHash: bcrypt.hashSync(PASSWORD, 4) },
     });
-    const second = await authService.login({
-      emailOrPhone: testEmail,
-      password: 'supersecret123',
+    await kit.auth.login(
+      { emailOrPhone: mail('legacy'), password: PASSWORD },
+      meta,
+    );
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: res.user.id } }))
+        .passwordHash,
+    ).toMatch(/^\$argon2id\$/);
+  });
+
+  it('a deactivated business blocks sign-in and refresh, and works again once reactivated', async () => {
+    const res = await verified('branch');
+    await prisma.business.update({
+      where: { id: res.business.id },
+      data: { active: false },
     });
-    if (!('refreshToken' in first) || !('refreshToken' in second)) {
-      throw new Error('Expected full tokens');
-    }
+    expect(
+      await codeOf(
+        kit.auth.login(
+          { emailOrPhone: mail('branch'), password: PASSWORD },
+          meta,
+        ),
+      ),
+    ).toBe('BUSINESS_DEACTIVATED');
+    expect(await codeOf(kit.auth.refresh(res.tokens.refreshToken))).toBe(
+      'INVALID_REFRESH',
+    );
+    await prisma.business.update({
+      where: { id: res.business.id },
+      data: { active: true },
+    });
+    expect(
+      (
+        await kit.auth.login(
+          { emailOrPhone: mail('branch'), password: PASSWORD },
+          meta,
+        )
+      ).status,
+    ).toBe('authenticated');
+  });
 
-    const firstPayload = jwt.decode<{ sessionId: string }>(first.refreshToken);
+  it('two logins get two independent sessions; logout ends only the current one', async () => {
+    const res = await verified('twodev');
+    const a = authed(
+      await kit.auth.login(
+        { emailOrPhone: mail('twodev'), password: PASSWORD },
+        meta,
+      ),
+    );
+    const b = authed(
+      await kit.auth.login(
+        { emailOrPhone: mail('twodev'), password: PASSWORD },
+        meta,
+      ),
+    );
+    expect(a.tokens.sessionId).not.toBe(b.tokens.sessionId);
+    await kit.auth.logout({
+      sub: res.user.id,
+      businessId: res.business.id,
+      sessionId: a.tokens.sessionId,
+    } as AuthenticatedUser);
+    expect(await kit.sessions.resolveAccess(a.tokens.accessToken)).toBeNull();
+    expect(
+      await kit.sessions.resolveAccess(b.tokens.accessToken),
+    ).not.toBeNull();
+    // Rotation issues new tokens and retires the presented refresh token.
+    const rotated = await kit.auth.refresh(b.tokens.refreshToken);
+    expect(rotated.tokens.refreshToken).not.toBe(b.tokens.refreshToken);
+    expect(await kit.sessions.resolveAccess(b.tokens.accessToken)).toBeNull();
+    expect(
+      await kit.sessions.resolveAccess(rotated.tokens.accessToken),
+    ).not.toBeNull();
+  });
 
-    await authService.logout(firstPayload.sessionId);
-
-    // The first session's refresh token is now dead; the second device is untouched.
-    await expect(authService.refresh(first.refreshToken)).rejects.toThrow();
-    await expect(
-      authService.refresh(second.refreshToken),
-    ).resolves.toBeDefined();
+  it('the device list never exposes token hashes and marks the current session', async () => {
+    const res = await verified('list');
+    const list = await kit.sessions.list(res.user.id, res.tokens.sessionId);
+    expect(list.find((s) => s.current)?.id).toBe(res.tokens.sessionId);
+    expect(JSON.stringify(list)).not.toMatch(/Hash|token/i);
   });
 });

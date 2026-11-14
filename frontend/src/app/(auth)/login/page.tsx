@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api-client";
-import { login as loginRequest, verifyTwoFactorLogin } from "@/lib/auth-api";
+import { login as loginRequest, type SignInStep } from "@/lib/auth-api";
 import { toast } from "@/lib/toast";
 import {
   AuthCard,
@@ -25,6 +25,8 @@ import {
 import { SocialButtons, useAuthProviders } from "@/components/auth-flow/social-buttons";
 import { isPasskeyCancel, passkeysSupported, signInWithPasskey } from "@/lib/passkeys";
 import { establishSession } from "@/components/auth-flow/session";
+import { SignInSteps } from "@/components/auth-flow/sign-in-steps";
+import { Turnstile } from "@/components/auth-flow/turnstile";
 
 /** Safe messages for `/login?error=` codes from the provider callback (never reveal whether an email has an account). */
 const SIGN_IN_ERRORS: Record<string, string> = {
@@ -34,6 +36,8 @@ const SIGN_IN_ERRORS: Record<string, string> = {
   provider_unavailable: "That sign-in method isn't available right now — use your email instead.",
   account_exists: "We couldn't sign you in with that account. If you already have a Noxtill account, log in below, then connect it from Settings → Security.",
   sign_in_expired: "Your sign-in expired — please try again.",
+  provider_email_unverified: "That Google account's email address isn't verified. Verify it with Google, or log in with your email.",
+  rate_limited: "Too many sign-in attempts. Wait a few minutes and try again.",
 };
 
 type SearchParams = Promise<{ tab?: string | string[]; next?: string | string[]; error?: string | string[]; reset?: string | string[] }>;
@@ -52,9 +56,17 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
   const [error, setError] = useState<string | null>(providerError ? (SIGN_IN_ERRORS[providerError] ?? "Sign-in failed — please try again.") : null);
   const { data: providers } = useAuthProviders();
   const [passkeyBusy, setPasskeyBusy] = useState(false);
-  // A 2FA-enabled account gets a code step before tokens are issued (UPD-INT-016).
-  const [tempToken, setTempToken] = useState<string | null>(null);
-  const [code, setCode] = useState("");
+  // New device → emailed code; then the second factor (spec §7.3). No session exists until both pass.
+  const [step, setStep] = useState<Exclude<SignInStep, { status: "authenticated" }> | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+  async function handleStep(result: SignInStep) {
+    if (result.status === "authenticated") {
+      router.push(await establishSession(result, next));
+      return;
+    }
+    setStep(result);
+  }
 
   useEffect(() => {
     // Old "/login?tab=signup" links (marketing CTAs) now have their own page.
@@ -71,13 +83,10 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
     }
     setSubmitting(true);
     try {
-      const result = await loginRequest({ emailOrPhone: email.trim(), password, rememberMe: remember });
-      if ("pending2fa" in result) {
-        setTempToken(result.tempToken);
-        setSubmitting(false);
-        return;
-      }
-      router.push(await establishSession(result, next));
+      const result = await loginRequest({ emailOrPhone: email.trim(), password, rememberMe: remember, turnstileToken: turnstileToken ?? undefined });
+      setSubmitting(false);
+      setPassword("");
+      await handleStep(result);
     } catch (err) {
       setSubmitting(false);
       setError(err instanceof ApiError ? (err.status === 401 ? "That email and password don't match an account." : err.message) : "Something went wrong — please try again.");
@@ -89,32 +98,14 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
     setError(null);
     setPasskeyBusy(true);
     try {
+      // A passkey is possession + biometric/PIN, so it completes the second factor too.
       const result = await signInWithPasskey();
-      if ("pending2fa" in result) {
-        // A passkey proves identity; an account with WhatsApp 2FA still needs its code.
-        setTempToken(result.tempToken);
-        setPasskeyBusy(false);
-        return;
-      }
-      router.push(await establishSession(result, next));
+      setPasskeyBusy(false);
+      await handleStep(result);
     } catch (err) {
       setPasskeyBusy(false);
       if (isPasskeyCancel(err)) return;
       setError(err instanceof ApiError ? err.message : "We couldn't sign you in with a passkey — try again or use your email.");
-    }
-  }
-
-  async function onVerify(e: React.FormEvent) {
-    e.preventDefault();
-    if (!tempToken) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      const tokens = await verifyTwoFactorLogin({ tempToken, code });
-      router.push(await establishSession(tokens, next));
-    } catch (err) {
-      setSubmitting(false);
-      setError(err instanceof ApiError ? err.message : "Something went wrong — please try again.");
     }
   }
 
@@ -125,39 +116,15 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
         <Title>Welcome back</Title>
         <Subtitle>Log in to your account</Subtitle>
 
-        {tempToken ? (
-          <form key="2fa" onSubmit={onVerify}>
-            <p style={{ fontSize: 15, color: C.secondary, margin: "0 0 18px", textAlign: "center", lineHeight: 1.5 }}>
-              We sent a 6-digit verification code to your phone to finish signing in.
-            </p>
-            <FieldLabel htmlFor="code">Verification code</FieldLabel>
-            <TextField
-              id="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              autoFocus
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              style={{ marginBottom: 16, letterSpacing: ".3em" }}
-            />
-            <FormError message={error} />
-            <PrimaryButton type="submit" disabled={submitting || code.length !== 6}>
-              {submitting ? "Verifying…" : "Verify & log in"}
-              <ArrowRight />
-            </PrimaryButton>
-            <button
-              type="button"
-              onClick={() => {
-                setTempToken(null);
-                setCode("");
-                setError(null);
-              }}
-              style={{ width: "100%", border: 0, background: "transparent", padding: "18px 6px 0", cursor: "pointer", fontSize: 15, fontWeight: 600, color: C.slate }}
-            >
-              Back to login
-            </button>
-          </form>
+        {step ? (
+          <SignInSteps
+            step={step}
+            onResult={handleStep}
+            onBack={() => {
+              setStep(null);
+              setError(null);
+            }}
+          />
         ) : (
           <>
             <SocialButtons />
@@ -207,6 +174,7 @@ export default function LoginPage({ searchParams }: { searchParams: SearchParams
                   Forgot password?
                 </Link>
               </div>
+              <Turnstile onToken={setTurnstileToken} />
               <FormError message={error} />
               <PrimaryButton type="submit" disabled={submitting}>
                 {submitting ? "Logging in…" : "Log In"}

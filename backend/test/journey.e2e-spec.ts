@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -28,7 +29,8 @@ describe('Core journey (e2e)', () => {
   let messagesQueueAddSpy: jest.SpiedFunction<Queue['add']>;
 
   const email = `journey-e2e-${Date.now()}@example.com`;
-  const password = 'TestPass123!';
+  // Unique per run: signup rejects known-breached passwords, so a fixed common one would fail.
+  const password = `Jrny-${randomUUID()}-q7!`;
   let accessToken: string;
   let businessId: string;
 
@@ -94,14 +96,29 @@ describe('Core journey (e2e)', () => {
       })
       .expect(201);
 
-    const signup = res.body as {
-      accessToken: string;
-      business: { id: string };
-    };
-    expect(signup.accessToken).toBeDefined();
+    // Auth Security spec §8: the session is an HttpOnly `nx_at` cookie, not a body field. The guard
+    // also accepts the same opaque token as a Bearer, which is how this non-browser client sends it.
+    const signup = res.body as { business: { id: string } };
+    const setCookie = ([] as string[]).concat(res.headers['set-cookie'] ?? []);
+    const accessCookie = setCookie.find((c) => /^(?:__Host-)?nx_at=/.test(c));
+    expect(accessCookie).toBeDefined();
     expect(signup.business.id).toBeDefined();
-    accessToken = signup.accessToken;
+    accessToken = decodeURIComponent(
+      accessCookie!.split(';')[0].split('=').slice(1).join('='),
+    );
     businessId = signup.business.id;
+
+    // A new owner is gated behind email verification and authenticator/passkey enrolment. This
+    // journey is about the sale flow, not those ceremonies (covered by the auth specs), so mark
+    // the test user as having completed both, exactly as the real verify/enrol endpoints do.
+    const user = await prisma.user.update({
+      where: { email: email.toLowerCase() },
+      data: { emailVerifiedAt: new Date() },
+    });
+    await prisma.session.updateMany({
+      where: { userId: user.id, mfaSetupRequired: true },
+      data: { mfaSetupRequired: false },
+    });
   });
 
   let productId: string;

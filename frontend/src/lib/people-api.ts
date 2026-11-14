@@ -1,5 +1,4 @@
-import { apiFetch, BASE_URL } from "@/lib/api-client";
-import { useAuthStore } from "@/store/auth-store";
+import { apiFetch, BASE_URL, csrfHeader } from "@/lib/api-client";
 import { useBranchContextStore } from "@/store/branch-context-store";
 import type { PBtn, PChip, PRowGroup, PSel } from "@/lib/payments-api";
 
@@ -128,9 +127,8 @@ export interface PpSettings {
 }
 
 function headers() {
-  const token = useAuthStore.getState().accessToken;
   const branch = useBranchContextStore.getState().selectedBranchId;
-  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(branch ? { "X-Branch": branch } : {}) };
+  return { ...csrfHeader(), ...(branch ? { "X-Branch": branch } : {}) };
 }
 
 /** Multipart POST through the same auth/branch headers as apiFetch. */
@@ -138,7 +136,7 @@ async function upload<T>(path: string, data: unknown, file?: File | null): Promi
   const fd = new FormData();
   fd.append("data", JSON.stringify(data));
   if (file) fd.append("file", file);
-  const r = await fetch(`${BASE_URL}${path}`, { method: "POST", headers: headers(), body: fd });
+  const r = await fetch(`${BASE_URL}${path}`, { credentials: "include", method: "POST", headers: headers(), body: fd });
   const text = await r.text();
   const body = text ? (JSON.parse(text) as unknown) : null;
   if (!r.ok) throw new Error((body as { error?: { message?: string } } | null)?.error?.message ?? `Request failed (${r.status})`);
@@ -147,7 +145,7 @@ async function upload<T>(path: string, data: unknown, file?: File | null): Promi
 
 /** Authenticated file download — keeps auth off the URL. */
 async function download(path: string, fallback: string) {
-  const r = await fetch(`${BASE_URL}${path}`, { headers: headers() });
+  const r = await fetch(`${BASE_URL}${path}`, { credentials: "include", headers: headers() });
   if (!r.ok) {
     const t = await r.text();
     let m = `Download failed (${r.status})`;
@@ -246,7 +244,7 @@ export const ppApi = {
 /** Public careers page (no staff auth). */
 export const careersApi = {
   page: async (slug: string) => {
-    const r = await fetch(`${BASE_URL}/public/careers/${enc(slug)}`);
+    const r = await fetch(`${BASE_URL}/public/careers/${enc(slug)}`, { credentials: "include" });
     const t = await r.text();
     const b = t ? (JSON.parse(t) as unknown) : null;
     if (!r.ok) throw new Error((b as { error?: { message?: string } } | null)?.error?.message ?? "Careers page unavailable");
@@ -256,7 +254,7 @@ export const careersApi = {
     const fd = new FormData();
     fd.append("data", JSON.stringify(data));
     if (file) fd.append("file", file);
-    const r = await fetch(`${BASE_URL}/public/careers/${enc(slug)}/apply`, { method: "POST", body: fd });
+    const r = await fetch(`${BASE_URL}/public/careers/${enc(slug)}/apply`, { credentials: "include", method: "POST", body: fd });
     const t = await r.text();
     const b = t ? (JSON.parse(t) as unknown) : null;
     if (!r.ok) throw new Error((b as { error?: { message?: string } } | null)?.error?.message ?? `Application failed (${r.status})`);

@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { RequireStepUp } from '../common/decorators/require-step-up.decorator';
 import { ScheduledExportsService } from './scheduled-exports.service';
 import { CreateScheduledExportDto } from './dto/create-scheduled-export.dto';
 import { UpdateScheduledExportDto } from './dto/update-scheduled-export.dto';
@@ -39,6 +40,7 @@ export class ScheduledExportsController {
     return this.scheduledExports.update(id, dto);
   }
 
+  @RequireStepUp()
   @Post(':id/run')
   runNow(@Param('id') id: string) {
     return this.scheduledExports.runNow(id);

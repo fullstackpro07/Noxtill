@@ -1,4 +1,4 @@
-import { apiFetch, refreshAccessToken } from "@/lib/api-client";
+import { apiFetch, refreshAccessToken, csrfHeader } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth-store";
 import { useBranchContextStore } from "@/store/branch-context-store";
 
@@ -28,15 +28,14 @@ interface StreamHandlers {
 
 function buildHeaders(): Headers {
   const headers = new Headers({ "Content-Type": "application/json" });
-  const { accessToken } = useAuthStore.getState();
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  for (const [k, v] of Object.entries(csrfHeader())) headers.set(k, v);
   const selectedBranchId = useBranchContextStore.getState().selectedBranchId;
   if (selectedBranchId) headers.set("X-Branch", selectedBranchId);
   return headers;
 }
 
 function postChat(message: string, conversationId: string | undefined, signal?: AbortSignal): Promise<Response> {
-  return fetch(`${BASE_URL}/assistant/chat`, {
+  return fetch(`${BASE_URL}/assistant/chat`, { credentials: "include",
     method: "POST",
     headers: buildHeaders(),
     body: JSON.stringify({ message, conversationId }),

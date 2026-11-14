@@ -64,7 +64,12 @@ export async function facebookProfile(p: {
   if (!accessToken) throw invalid('no access token');
 
   const debug = await axios.get<{
-    data?: { is_valid?: boolean; app_id?: string; user_id?: string };
+    data?: {
+      is_valid?: boolean;
+      app_id?: string;
+      user_id?: string;
+      expires_at?: number;
+    };
   }>(`${graph}/debug_token`, {
     params: {
       input_token: accessToken,
@@ -74,6 +79,9 @@ export async function facebookProfile(p: {
   });
   const info = debug.data.data;
   if (!info?.is_valid) throw invalid('token not valid');
+  // Spec §4.3: expires_at must be in the future (0 would mean a non-expiring token — not a login token).
+  if (!info.expires_at || info.expires_at * 1000 <= Date.now())
+    throw invalid('token expired');
   if (String(info.app_id) !== p.clientId)
     throw invalid('issued to another app');
   if (!info.user_id) throw invalid('no user');

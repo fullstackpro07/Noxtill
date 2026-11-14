@@ -22,6 +22,10 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }],
   },
+  async headers() {
+    // Spec §7.4: the reset page never leaks its URL (token) through the Referer header.
+    return [{ source: "/reset-password", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] }];
+  },
   async redirects() {
     return [
       // One canonical host: www.noxtill.com → noxtill.com (301), path and query kept.

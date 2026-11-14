@@ -1,5 +1,5 @@
+import { csrfHeader } from "@/lib/api-client";
 import { apiFetch, BASE_URL } from "./api-client";
-import { useAuthStore } from "@/store/auth-store";
 import { useBranchContextStore } from "@/store/branch-context-store";
 
 const F = "/finance";
@@ -374,9 +374,8 @@ export const finApi = {
 
 /** Downloads an export with the session's auth and branch headers. */
 export async function finDownload(path: string, q: Record<string, unknown> = {}): Promise<string> {
-  const token = useAuthStore.getState().accessToken;
   const branch = useBranchContextStore.getState().selectedBranchId;
-  const res = await fetch(`${BASE_URL}${F}${path}${qs(q)}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(branch ? { "X-Branch": branch } : {}) } });
+  const res = await fetch(`${BASE_URL}${F}${path}${qs(q)}`, { credentials: "include", headers: { ...csrfHeader(), ...(branch ? { "X-Branch": branch } : {}) } });
   if (!res.ok) {
     let msg = `Export failed (${res.status})`;
     try {

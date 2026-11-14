@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import { hashPassword } from '../auth/security/password.service';
 import {
   PpActor,
   PpContextService,
@@ -361,7 +361,7 @@ export class PpPeopleService {
             name: c.name,
             email: c.email.toLowerCase(),
             phone: c.phone || null,
-            passwordHash: await bcrypt.hash(tempPassword, 10),
+            passwordHash: await hashPassword(tempPassword),
           },
         });
         userId = u.id;
